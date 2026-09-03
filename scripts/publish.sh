@@ -28,7 +28,8 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 echo "publish: packing bundle"
-tar czf "$TMP/data.tar.gz" -C web/public data
+# COPYFILE_DISABLE / --no-xattrs: keep macOS extended attributes out (they spam GNU tar on Vercel)
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$TMP/data.tar.gz" -C web/public data
 ls -la "$TMP/data.tar.gz"
 
 if ! gh release view data >/dev/null 2>&1; then
