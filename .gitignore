@@ -18,3 +18,7 @@ web/dist/
 .DS_Store
 .idea/
 .vscode/
+# static export + vercel
+web/public/data/
+.vercel/
+*.tsbuildinfo

@@ -100,6 +100,22 @@ def prices(
         typer.echo(fetch_prices(con, tickers=tickers, start=start))
 
 
+@app.command("export-static")
+def export_static(
+    out: str = typer.Option("web/public/data", help="Output directory (wiped first)"),
+):
+    """Write every API response as static JSON so the web app can be hosted without a server."""
+    from pathlib import Path
+
+    from soi.config import PROJECT_ROOT
+    from soi.export_static import export_static as _export
+
+    dest = Path(out)
+    if not dest.is_absolute():
+        dest = PROJECT_ROOT / dest
+    _export(dest, log=typer.echo)
+
+
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = True):
     """Run the FastAPI server."""

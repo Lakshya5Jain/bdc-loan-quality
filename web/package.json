@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:static": "VITE_DATA_MODE=static vite",
     "build": "tsc -b && vite build",
+    "build:static": "bash scripts/fetch-data.sh && tsc -b && VITE_DATA_MODE=static vite build",
     "preview": "vite preview"
   },
   "dependencies": {
