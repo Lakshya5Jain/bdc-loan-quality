@@ -29,7 +29,9 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 echo "publish: packing bundle"
 # COPYFILE_DISABLE / --no-xattrs: keep macOS extended attributes out (they spam GNU tar on Vercel)
-COPYFILE_DISABLE=1 tar --no-xattrs -czf "$TMP/data.tar.gz" -C web/public data
+# xattrs are dropped by piping through GNU-compatible options and stripping macOS metadata first
+xattr -rc web/public/data 2>/dev/null || true
+COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$TMP/data.tar.gz" -C web/public data
 ls -la "$TMP/data.tar.gz"
 
 if ! gh release view data >/dev/null 2>&1; then

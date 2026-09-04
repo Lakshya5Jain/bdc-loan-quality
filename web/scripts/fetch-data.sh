@@ -18,5 +18,9 @@ fi
 echo "fetch-data: downloading $URL"
 rm -rf public/data
 mkdir -p public
-curl -fsSL --retry 3 "$URL" | tar xz -C public
+# download to a file first (large asset; GitHub's CDN occasionally resets HTTP/2 streams), then extract
+TMPF="$(mktemp)"
+curl -fSL --http1.1 --retry 5 --retry-all-errors --retry-delay 5 -o "$TMPF" "$URL"
+tar xzf "$TMPF" -C public 2>&1 | grep -v "Ignoring unknown extended header" || true
+rm -f "$TMPF"
 echo "fetch-data: $(cat public/data/manifest.json)"
