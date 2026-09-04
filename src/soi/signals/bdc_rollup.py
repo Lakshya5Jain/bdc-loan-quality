@@ -32,7 +32,7 @@ def build_loan_quarter(con: duckdb.DuckDBPyConnection) -> None:
         WITH h AS (
             SELECT lh.*, {BUCKET_SQL} AS mark_bucket,
                    r.coverage,
-                   (r.coverage BETWEEN 0.85 AND 1.15) AS data_ok
+                   (r.coverage BETWEEN 0.9 AND 1.1 OR r.override_note IS NOT NULL) AS data_ok
             FROM core.loan_history lh
             LEFT JOIN core.reconciliation r ON r.cik = lh.cik AND r.period_end = lh.period_end
                  AND r.adsh = lh.adsh

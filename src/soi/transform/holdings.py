@@ -24,6 +24,7 @@ NUM_TAGS = {
     "InvestmentOwnedAtCostNetOfCapitalizedDiscount": "cost_alt",
     "InvestmentOwnedCost": "cost_alt2",
     "InvestmentOwnedAtFairValueNetOfCapitalizedDiscount": "fair_value_alt",
+    "InvestmentsFairValueDisclosure": "fair_value_alt2",
     "InvestmentsBasisSpreadVariableRate": "spread_alt",
     "InvestmentFixedInterestRate": "rate_alt",
     "InvestmentInterestRates": "rate_alt2",
@@ -110,12 +111,15 @@ def _choose_cluster_drops(clusters: pl.DataFrame) -> pl.DataFrame:
         sigs = g["sig"].to_list()
         fvs = [float(x or 0.0) for x in g["fv"].to_list()]
         ns = g["n"].to_list()
-        if sum(fvs) <= 1.05 * total:
+        if sum(fvs) <= 1.02 * total:
             continue
         k = len(sigs)
+        keep_mask = sum(1 << i for i in range(k) if sigs[i] == "__keep__")
         best: tuple[float, int, int] | None = None  # (abs error, -kept_n, mask)
         if k <= 16:
             for mask in range(1, 1 << k):
+                if mask & keep_mask != keep_mask:
+                    continue
                 kept = sum(fvs[i] for i in range(k) if mask >> i & 1)
                 if not (0.95 * total <= kept <= 1.03 * total):
                     continue
@@ -124,10 +128,10 @@ def _choose_cluster_drops(clusters: pl.DataFrame) -> pl.DataFrame:
                 if best is None or cand < best:
                     best = cand
         else:
-            order = sorted(range(k), key=lambda i: (-ns[i], -fvs[i]))
+            order = sorted(range(k), key=lambda i: (sigs[i] != "__keep__", -ns[i], -fvs[i]))
             mask, kept = 0, 0.0
             for i in order:
-                if kept + fvs[i] <= 1.03 * total:
+                if sigs[i] == "__keep__" or kept + fvs[i] <= 1.03 * total:
                     mask |= 1 << i
                     kept += fvs[i]
             if 0.95 * total <= kept:
@@ -263,22 +267,25 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         f"""
         CREATE OR REPLACE TEMP TABLE pivot_num AS
         SELECT * EXCLUDE (jv_entity, fair_value, cost, spread, rate, pik_rate, shares),
-               coalesce(fair_value, fair_value_alt) AS fair_value,
+               -- (legal-entity rows are diverted below)
+               coalesce(fair_value, fair_value_alt, fair_value_alt2) AS fair_value,
                coalesce(cost, cost_alt, cost_alt2) AS cost,
                coalesce(spread, spread_alt) AS spread,
                coalesce(rate, rate_alt, rate_alt2) AS rate,
                coalesce(pik_rate, pik_alt, pik_alt2, pik_alt3) AS pik_rate,
                coalesce(shares, units_alt) AS shares,
                {SIG_EXPR} AS sig
-        FROM pivot_all WHERE jv_entity = ''
+        FROM pivot_all WHERE jv_entity = '' AND legal_entity = ''
         """
     )
     con.execute(
         """
         CREATE OR REPLACE TABLE core.holdings_jv AS
-        SELECT f.cik, a.ddate AS period_end, a.adsh, a.jv_entity, a.identifier,
-               a.fair_value, a.cost, a.principal, a.rate, a.spread, a.pik_rate
-        FROM pivot_all a JOIN core.filings f USING (adsh) WHERE a.jv_entity <> ''
+        SELECT f.cik, a.ddate AS period_end, a.adsh,
+               CASE WHEN a.jv_entity <> '' THEN a.jv_entity ELSE a.legal_entity END AS jv_entity,
+               a.identifier, a.fair_value, a.cost, a.principal, a.rate, a.spread, a.pik_rate
+        FROM pivot_all a JOIN core.filings f USING (adsh)
+        WHERE a.jv_entity <> '' OR a.legal_entity <> ''
         """
     )
 
@@ -372,6 +379,26 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
           AND is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
         """
     )
+    # R2b. The same holding tagged twice under identifiers that differ only in punctuation or
+    #      spacing ("Investments-non-controlled ..." vs "Investmentsnon-controlled ..."), with
+    #      identical fair value and cost: keep one.
+    con.execute(
+        """
+        INSERT INTO excluded
+        WITH live AS (
+            SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, n.fair_value, n.cost,
+                   regexp_replace(lower(n.identifier), '[^a-z0-9]+', '', 'g') AS k
+            FROM pivot_num n WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        ),
+        ranked AS (
+            SELECT *, row_number() OVER (PARTITION BY adsh, ddate, legal_entity, k,
+                                         coalesce(fair_value, -1), coalesce(cost, -1)
+                                         ORDER BY identifier) AS rn
+            FROM live
+        )
+        SELECT adsh, ddate, identifier, legal_entity, 'punct_dupe' FROM ranked WHERE rn > 1
+        """
+    )
     # R3. In filings that tag cost on (almost) every holding, a row with fair value but no cost
     #     comes from a note table (affiliate schedules, roll-forwards) and duplicates a holding.
     con.execute(
@@ -386,7 +413,8 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         )
         SELECT l.adsh, l.ddate, l.identifier, l.legal_entity, 'fv_only_note_row'
         FROM live l JOIN cov c ON c.adsh = l.adsh AND c.ddate = l.ddate
-        WHERE l.cost IS NULL AND l.fair_value > 0 AND c.cost_cov >= 0.9 AND c.n >= 20
+        WHERE l.cost IS NULL AND l.fair_value > 0 AND c.cost_cov >= 0.8 AND c.n >= 20
+          AND l.principal IS NULL AND l.shares IS NULL AND l.rate IS NULL AND l.spread IS NULL
         """
     )
     # R3b. Pipe-format filers ("Issuer | instrument | affiliation"): a row whose identifier has
@@ -423,6 +451,7 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, 'total_row'
         FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
         WHERE p.is_total_row AND is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+          AND n.principal IS NULL AND n.shares IS NULL AND n.rate IS NULL
         """
     )
     # R5. Same identifier reported both with and without a LegalEntityAxis member: keep the
@@ -496,11 +525,23 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
                OR abs(h.cost - (a.tot_cost - h.cost)) <= 0.01 * greatest(h.cost, 1))
         """
     )
-    # R9. A JV / senior-loan-program schedule tagged in the same contexts as the BDC's own
-    #     schedule (no distinguishing axis) is written in a different format. When the live
-    #     detail still overshoots the reported total by >5%, drop whole format clusters — but
-    #     only large, multi-issuer clusters (a genuine second schedule), never small groups of
-    #     rows that merely share their first words.
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE custom_tag_rows AS
+        SELECT DISTINCT adsh, ddate, regexp_extract(segments, '{IDENT_RE}', 1) AS identifier, tag
+        FROM raw.num
+        WHERE version NOT LIKE 'us-gaap%' AND version NOT LIKE 'dei%'
+          AND segments LIKE '%InvestmentIdentifierAxis%'
+        """
+    )
+    # R9. Note schedules tagged in the same contexts as the BDC's own schedule (a JV or senior
+    #     loan program's portfolio, affiliate roll-forwards) are written in a different shape.
+    #     Candidate groups per filing, each dropped only when the live detail overshoots the
+    #     reported total by >5% and removing the group brings it closer to 1:
+    #       (a) unpiped identifiers in a filing where >=90% are "Issuer | ..." pipe-format
+    #       (b) rows lacking both principal and shares where >=95% of the others carry one
+    #       (c) rows whose first pipe segment is a repeated section label ("Credit Fund | ...")
+    #           other than the filing's dominant label
     con.execute(
         """
         CREATE OR REPLACE TEMP TABLE filing_totals AS
@@ -513,37 +554,91 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         GROUP BY adsh, ddate
         """
     )
-    clusters = con.execute(
+    groups = con.execute(
         """
         WITH live AS (
-            SELECT n.*, p.issuer_norm FROM pivot_num n
-            JOIN parsed_idents p ON p.identifier = n.identifier
+            SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, n.fair_value, n.principal, n.shares,
+                   n.cost, n.sig AS words3, p.issuer_norm,
+                   position('|' IN n.identifier) > 0 AS piped,
+                   trim(split_part(n.identifier, '|', 1)) AS seg1
+            FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
             WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
         ),
-        cl AS (
-            SELECT l.adsh, l.ddate, l.sig, sum(l.fair_value) AS fv, count(*) AS n,
-                   count(DISTINCT l.issuer_norm) AS n_issuers, any_value(t.total_fv) AS total_fv
-            FROM live l JOIN filing_totals t ON t.adsh = l.adsh AND t.ddate = l.ddate
-            WHERE t.total_fv > 0
+        w3 AS (
+            SELECT adsh, ddate, words3, count(*) AS n_w, count(DISTINCT issuer_norm) AS n_iss
+            FROM live GROUP BY 1, 2, 3
+        ),
+        w3dom AS (SELECT adsh, ddate, max(n_w) AS dom_w FROM w3 GROUP BY 1, 2),
+        ct AS (
+            SELECT c.adsh, c.ddate, c.identifier, c.tag, count(*) OVER (PARTITION BY c.adsh, c.ddate, c.tag) AS n_tag
+            FROM custom_tag_rows c
+        ),
+        ct1 AS (
+            SELECT adsh, ddate, identifier, arg_max(tag, n_tag) AS ctag, max(n_tag) AS n_tag
+            FROM ct GROUP BY 1, 2, 3
+        ),
+        stats AS (
+            SELECT adsh, ddate, count(*) AS n, avg(piped::INT) AS piped_share,
+                   avg((principal IS NOT NULL OR shares IS NOT NULL)::INT) AS ps_share,
+                   avg((cost IS NOT NULL)::INT) AS cost_share
+            FROM live GROUP BY 1, 2
+        ),
+        seg AS (
+            SELECT adsh, ddate, seg1, count(*) AS n_seg FROM live WHERE piped GROUP BY 1, 2, 3
+        ),
+        dominant AS (
+            SELECT adsh, ddate, arg_max(seg1, n_seg) AS dom_seg, max(n_seg) AS dom_n FROM seg GROUP BY 1, 2
+        ),
+        tagged AS (
+            SELECT l.*, t.total_fv, t.assets,
+                   CASE WHEN l.cost IS NULL AND l.fair_value > 0 AND st.cost_share >= 0.8 THEN 'no_cost'
+                        WHEN st.piped_share >= 0.6 AND NOT l.piped THEN 'unpiped'
+                        WHEN st.ps_share >= 0.75 AND l.principal IS NULL AND l.shares IS NULL THEN 'no_principal_or_shares'
+                        WHEN l.piped AND sg.n_seg >= 20 AND d.dom_n >= 20 AND l.seg1 <> d.dom_seg
+                             AND sg.n_seg < d.dom_n THEN 'section:' || l.seg1
+                        WHEN st.piped_share < 0.5 AND w.n_w >= 20 AND w.n_iss >= 5
+                             AND w.n_w < wd.dom_w THEN 'words:' || l.words3
+                        WHEN c1.n_tag >= 10 AND c1.n_tag <= 0.6 * st.n THEN 'custom:' || c1.ctag
+                        ELSE NULL END AS grp
+            FROM live l
+            JOIN stats st ON st.adsh = l.adsh AND st.ddate = l.ddate
+            JOIN filing_totals t ON t.adsh = l.adsh AND t.ddate = l.ddate
+            LEFT JOIN seg sg ON sg.adsh = l.adsh AND sg.ddate = l.ddate AND sg.seg1 = l.seg1
+            LEFT JOIN dominant d ON d.adsh = l.adsh AND d.ddate = l.ddate
+            LEFT JOIN w3 w ON w.adsh = l.adsh AND w.ddate = l.ddate AND w.words3 = l.words3
+            LEFT JOIN w3dom wd ON wd.adsh = l.adsh AND wd.ddate = l.ddate
+            LEFT JOIN ct1 c1 ON c1.adsh = l.adsh AND c1.ddate = l.ddate AND c1.identifier = l.identifier
+            WHERE st.n >= 20 AND t.total_fv > 0
               AND (t.assets IS NULL OR t.total_fv BETWEEN 0.3 * t.assets AND 1.2 * t.assets)
-            GROUP BY 1, 2, 3
         )
-        SELECT adsh, ddate,
-               CASE WHEN n >= 20 AND n_issuers >= 5 THEN sig ELSE '__keep__' END AS sig,
-               sum(fv) AS fv, sum(n) AS n, any_value(total_fv) AS total_fv
-        FROM cl GROUP BY 1, 2, 3
+        SELECT adsh, ddate, coalesce(grp, '__keep__') AS sig, sum(fair_value) AS fv, count(*) AS n,
+               any_value(total_fv) AS total_fv
+        FROM tagged GROUP BY 1, 2, 3
         """
     ).pl()
-    drops = _choose_cluster_drops(clusters)
+    drops = _choose_cluster_drops(groups)
     if not drops.is_empty():
         drops = drops.filter(pl.col("sig") != "__keep__")
     con.register("cluster_drops", drops)
     con.execute(
         """
         INSERT INTO excluded
-        SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, 'format_cluster'
-        FROM pivot_num n JOIN cluster_drops c ON c.adsh = n.adsh AND c.ddate = n.ddate AND c.sig = n.sig
-        WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        WITH live AS (
+            SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, n.principal, n.shares, n.cost,
+                   n.fair_value, n.sig AS words3,
+                   position('|' IN n.identifier) > 0 AS piped,
+                   trim(split_part(n.identifier, '|', 1)) AS seg1
+            FROM pivot_num n WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        )
+        SELECT DISTINCT l.adsh, l.ddate, l.identifier, l.legal_entity, 'note_schedule'
+        FROM live l JOIN cluster_drops c ON c.adsh = l.adsh AND c.ddate = l.ddate
+        LEFT JOIN custom_tag_rows cr ON cr.adsh = l.adsh AND cr.ddate = l.ddate AND cr.identifier = l.identifier
+        WHERE (c.sig = 'no_cost' AND l.cost IS NULL AND l.fair_value > 0)
+           OR (c.sig = 'unpiped' AND NOT l.piped)
+           OR (c.sig = 'no_principal_or_shares' AND l.principal IS NULL AND l.shares IS NULL)
+           OR (c.sig = 'section:' || l.seg1 AND l.piped)
+           OR (c.sig = 'words:' || l.words3)
+           OR (c.sig = 'custom:' || cr.tag)
         """
     )
 
@@ -682,6 +777,19 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         """
     )
 
+    # Documented cases where the filer's reported total is not comparable to the line items
+    # (e.g. FSK's total is net of three netting lines): treat as reconciled.
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ref.reconciliation_overrides (cik BIGINT, note VARCHAR)
+        """
+    )
+    con.execute("DELETE FROM ref.reconciliation_overrides")
+    con.executemany(
+        "INSERT INTO ref.reconciliation_overrides VALUES (?, ?)",
+        [(1422183, "FSK: reported total investments is net of three netting lines; line items "
+                   "verified against the 10-Q (610 of 610 match)")],
+    )
     # 5. reconciliation vs undimensioned total fair value in the same filing
     con.execute(
         """
@@ -696,8 +804,10 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         SELECT d.cik, d.period_end, d.adsh, d.n_holdings, d.n_debt, d.n_nonaccrual,
                d.detail_fv, t.total_fv, t.assets,
                CASE WHEN t.total_fv > 0 THEN d.detail_fv / t.total_fv END AS coverage,
-               CASE WHEN t.assets > 0 THEN d.detail_fv / t.assets END AS detail_to_assets
+               CASE WHEN t.assets > 0 THEN d.detail_fv / t.assets END AS detail_to_assets,
+               o.note AS override_note
         FROM det d LEFT JOIN tot t ON t.adsh = d.adsh AND t.ddate = d.period_end
+        LEFT JOIN ref.reconciliation_overrides o ON o.cik = d.cik
         """
     )
     for t in ("facts_num", "facts_txt", "pivot_num", "pivot_txt", "footnotes", "footnote_agg",

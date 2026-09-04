@@ -179,12 +179,14 @@ def build_ix_footnotes(con, public_only: bool = True, since: str | None = None,
     done = 0
     try:
         for adsh, url, ticker, period in todo:
+            in_tx = False
             try:
                 path = download(adsh, url, client)
                 res = parse_footnotes(path, adsh)
                 rows = [(adsh, pend, ident, fn) for (pend, ident), fns in res.by_identifier.items()
                         for fn in fns if pend]
                 con.execute("BEGIN")
+                in_tx = True
                 con.execute("DELETE FROM raw.ix_footnotes WHERE adsh = ?", [adsh])
                 if rows:
                     con.executemany(
@@ -202,7 +204,8 @@ def build_ix_footnotes(con, public_only: bool = True, since: str | None = None,
                 if not keep_html and not path.name.startswith(("arcc-", "main-", "obdc-")):
                     path.unlink(missing_ok=True)
             except Exception as e:  # noqa: BLE001
-                con.execute("ROLLBACK") if con.execute("SELECT 1").fetchone() else None
+                if in_tx:
+                    con.execute("ROLLBACK")
                 con.execute("DELETE FROM raw.ix_filings WHERE adsh = ?", [adsh])
                 con.execute(
                     "INSERT INTO raw.ix_filings (adsh, n_rows, error) VALUES (?, 0, ?)", [adsh, str(e)[:500]]
