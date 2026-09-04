@@ -1,5 +1,6 @@
 import { useApi } from '../lib/api'
 import Stat from '../components/Stat'
+import { G } from '../lib/glossary'
 
 type S = {
   files: { source_file: string; loaded_at: string; n_sub: number; n_num: number; n_txt: number }[]
@@ -26,7 +27,7 @@ export default function Status() {
       </div>
       <div className="row">
         <div className="panel">
-          <h2>Reconciliation of per-loan detail to reported total investments (BDC-periods)</h2>
+          <h2 title={G.recon}>Data check: our loan totals vs what each BDC reported (BDC-quarters)</h2>
           <table className="grid"><tbody>{data.reconciliation.map((r) => <tr key={r.status}><td className="l">{r.status}</td><td>{r.n}</td></tr>)}</tbody></table>
           <h2>Rows excluded from holdings</h2>
           <table className="grid"><tbody>{data.excluded.map((r) => <tr key={r.reason}><td className="l">{r.reason}</td><td>{r.n.toLocaleString()}</td></tr>)}</tbody></table>

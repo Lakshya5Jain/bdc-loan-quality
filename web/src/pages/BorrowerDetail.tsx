@@ -41,7 +41,8 @@ export default function BorrowerDetail() {
       <div className="sub">{data.loans.length} positions across {new Set(data.loans.map((l) => l.cik)).size} BDCs · key <span className="muted">{data.borrower_key}</span></div>
       {periods.length > 0 && (
         <div className="panel">
-          <h2>Debt mark by lender over time (FV / cost)</h2>
+          <h2>How each lender marks this borrower, by quarter (fair value / cost)</h2>
+          <div className="small muted">Lenders holding the same company should mark it similarly. A lender far above the others is either better informed or late; the bottom row shows the gap between the highest and lowest mark.</div>
           <div className="tablewrap">
             <table className="grid">
               <thead><tr><th className="l">Lender</th>{periods.slice(-10).map((p) => <th key={p}>{p.slice(0, 7)}</th>)}</tr></thead>

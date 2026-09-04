@@ -12,6 +12,7 @@ export default function App() {
           <NavLink to="/borrowers">Borrowers</NavLink>
           <NavLink to="/sectors">Sectors</NavLink>
           <NavLink to="/scorecards">Lenders</NavLink>
+          <NavLink to="/glossary">Glossary</NavLink>
           <NavLink to="/status">Data</NavLink>
         </nav>
       </header>

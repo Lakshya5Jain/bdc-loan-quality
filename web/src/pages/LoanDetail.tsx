@@ -3,6 +3,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import Stat from '../components/Stat'
 import { useApi } from '../lib/api'
 import { cls, mm, num, pct, signed } from '../lib/format'
+import { G } from '../lib/glossary'
 
 type Hist = {
   period_end: string; identifier: string; instrument_type: string; fair_value: number | null; cost: number | null
@@ -31,6 +32,16 @@ export default function LoanDetail() {
     pik: h.pik_rate == null ? null : +(h.pik_rate * 100).toFixed(2),
   }))
   const latestPeers = data.peers.filter((p) => p.period_end === data.peers[0]?.period_end)
+  const last = data.history[data.history.length - 1]
+  const first = data.history[0]
+  const rk = data.risk[data.risk.length - 1]
+  const summary = [
+    `${l.bdc_name} holds a ${l.instrument_type.replace(/_/g, ' ')} to ${l.issuer_name || 'this borrower'}${last?.cost ? ` with $${(last.cost / 1e6).toFixed(1)}mm at cost` : ''}.`,
+    last?.mark != null ? `It is currently marked at ${num(last.mark, 3)}${first?.mark != null && data.history.length > 1 ? ` (${first.mark > last.mark + 0.005 ? 'down' : first.mark < last.mark - 0.005 ? 'up' : 'unchanged'} from ${num(first.mark, 3)} when first seen in ${first.period_end.slice(0, 7)})` : ''}.` : 'No mark is available (cost was not reported).',
+    last?.nonaccrual_flag ? 'The lender has it on non-accrual: interest is no longer being counted as income.' : last?.pik_flag ? 'It is paying interest in kind rather than cash.' : '',
+    rk ? `Risk score ${rk.risk_score}: ${rk.risk_score >= 100 ? 'already impaired' : rk.risk_score >= 40 ? 'high chance of going bad within a year' : rk.risk_score >= 20 ? 'elevated' : 'low'}${rk.reasons.length ? ` (${rk.reasons.join('; ')})` : ' (no warning signs)'}.` : '',
+    latestPeers.length > 1 ? `${latestPeers.length} BDCs hold this borrower; marks range from ${num(Math.min(...latestPeers.map((p) => p.mark ?? 9)), 3)} to ${num(Math.max(...latestPeers.map((p) => p.mark ?? 0)), 3)}.` : '',
+  ].filter(Boolean).join(' ')
   return (
     <div>
       <h1>{l.issuer_name || l.identifier}</h1>
@@ -38,6 +49,7 @@ export default function LoanDetail() {
         <Link to={`/bdcs/${l.cik}`}>{l.bdc_name}{l.ticker ? ` (${l.ticker})` : ''}</Link> · {l.instrument_type}{l.industry ? ` · ${l.industry}` : ''} · loan {l.loan_id}
         {' · '}<Link to={`/borrowers/${encodeURIComponent(l.borrower_key)}`}>other lenders to this borrower</Link>
       </div>
+      <div className="panel summary">{summary}</div>
       <div className="stats">
         <Stat k="Observed" v={`${l.n_periods} quarters`} d={`${l.first_period} → ${l.last_period}${l.exited ? ` · exited (${l.exit_type})` : ''}`} />
         <Stat k="Last mark" v={num(l.last_mark, 3)} d={`min ${num(l.min_mark, 3)}`} cls={l.last_mark != null && l.last_mark < 0.95 ? 'neg' : ''} />
@@ -48,7 +60,7 @@ export default function LoanDetail() {
       </div>
       <div className="row">
         <div className="panel">
-          <h2>Mark and pricing over time</h2>
+          <h2 title={G.mark}>Mark and pricing over time (mark on the left axis, rates on the right)</h2>
           <div className="chart">
             <ResponsiveContainer>
               <LineChart data={chart} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>

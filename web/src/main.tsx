@@ -13,6 +13,7 @@ import Insights from './pages/Insights'
 import Validation from './pages/Validation'
 import Sectors from './pages/Sectors'
 import Scorecards from './pages/Scorecards'
+import Glossary from './pages/Glossary'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="validation" element={<Validation />} />
           <Route path="sectors" element={<Sectors />} />
           <Route path="scorecards" element={<Scorecards />} />
+          <Route path="glossary" element={<Glossary />} />
         </Route>
       </Routes>
     </BrowserRouter>

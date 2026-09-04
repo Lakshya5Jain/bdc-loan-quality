@@ -6,6 +6,7 @@ import Stat from '../components/Stat'
 import { useApi } from '../lib/api'
 import { bn, bucketLabel, cls, mm, num, pct, signed, signedPct } from '../lib/format'
 import type { ScreenRow } from './Screener'
+import { G } from '../lib/glossary'
 
 type Quarter = {
   period_end: string; data_ok: boolean; coverage: number | null; n_holdings: number; n_debt: number
@@ -63,6 +64,18 @@ export default function BdcDetail() {
   if (error) return <div className="err">{error}</div>
   if (loading || !data || !latest) return <div className="loading">Loading…</div>
   const s = data.screen
+  const sc = (data as unknown as { scorecard?: { late_mark_rate: number | null; early_warning_rate: number | null; loss_exit_rate: number | null } }).scorecard
+  const naDelta = s?.d4_nonaccrual_pct_cost ?? null
+  const b90Delta = s?.d4_pct_debt_below_90 ?? null
+  const dir = (v: number | null, up: string, down: string, flat: string) => v == null ? '' : v > 0.005 ? up : v < -0.005 ? down : flat
+  const summary = [
+    `${data.bdc.name} has $${((latest.debt_cost ?? 0) / 1e9).toFixed(1)}bn of loans at cost across ${latest.n_debt} positions.`,
+    `${pct(latest.pct_debt_below_90)} of that is marked below 90 cents on the dollar${dir(b90Delta, ', up from a year ago', ', down from a year ago', ', about the same as a year ago')}.`,
+    `${pct(latest.nonaccrual_pct_cost)} is on non-accrual (${latest.n_nonaccrual} loans)${dir(naDelta, ', rising', ', falling', ', flat')}.`,
+    latest.quality_score != null ? `Its book quality is ${latest.quality_score > 0.5 ? 'worse than most BDCs' : latest.quality_score < -0.5 ? 'better than most BDCs' : 'about average'}${latest.quality_trend_4q != null ? (latest.quality_trend_4q > 0.25 ? ' and deteriorating' : latest.quality_trend_4q < -0.25 ? ' and improving' : ' and stable') : ''}.` : 'It has no quality score yet (not enough loans, or the data did not reconcile).',
+    s && s.p_nav != null ? `The stock trades at ${num(s.p_nav)}x NAV, ${s.p_nav >= 1.05 ? 'a premium' : s.p_nav <= 0.9 ? 'a clear discount' : 'near book value'}, and has returned ${signedPct(s.ret_12m)} over 12 months.` : '',
+    sc && sc.late_mark_rate != null ? `Track record: ${pct(sc.late_mark_rate, 0)} of loans it carried at par went bad within a year${sc.early_warning_rate != null ? `, and it had already marked down ${pct(sc.early_warning_rate, 0)} of loans before placing them on non-accrual` : ''}.` : '',
+  ].filter(Boolean).join(' ')
   const migPeriods = Array.from(new Set(data.migration.map((m) => m.period_end))).sort().slice(-1)
   const mig = data.migration.filter((m) => migPeriods.includes(m.period_end))
   const migCell = (f: string, t: string) => mig.filter((m) => m.from_bucket === f && m.to_bucket === t).reduce((a, m) => a + (m.cost ?? 0), 0)
@@ -71,9 +84,9 @@ export default function BdcDetail() {
   const filtered = (loans.data ?? []).filter((l) => !q || l.issuer_name?.toLowerCase().includes(q.toLowerCase()) || l.identifier.toLowerCase().includes(q.toLowerCase()))
   const loanCols: Col<Loan>[] = [
     { header: 'Issuer', accessorKey: 'issuer_name', left: true, cell: (c) => <Link to={`/loans/${c.row.original.loan_id}`}>{c.getValue<string>() || c.row.original.identifier}</Link> },
-    { header: 'Type', accessorKey: 'instrument_type', left: true, cell: (c) => `${c.getValue<string>()}${c.row.original.instrument_subtype ? ' · ' + c.row.original.instrument_subtype : ''}` },
+    { header: 'Type', accessorKey: 'instrument_type', left: true, tip: G.first_lien, cell: (c) => `${c.getValue<string>()}${c.row.original.instrument_subtype ? ' · ' + c.row.original.instrument_subtype : ''}` },
     { header: 'Industry', accessorKey: 'industry', left: true, cell: (c) => <span className="muted">{c.getValue<string>() ?? ''}</span> },
-    { header: 'Flags', id: 'flags', left: true, cell: (c) => {
+    { header: 'Warning signs', id: 'flags', left: true, tip: 'Non-accrual, stressed (mark below 95), marked down more than 2 points this quarter, PIK, spread up, maturity extended, converted to equity, new this quarter.', cell: (c) => {
       const l = c.row.original
       return <>
         {l.nonaccrual_flag && <span className="tag flag">{l.new_nonaccrual ? 'NEW non-accrual' : 'non-accrual'}</span>}
@@ -87,13 +100,13 @@ export default function BdcDetail() {
       </> } },
     { header: 'FV ($mm)', accessorKey: 'fair_value', cell: (c) => mm(c.getValue<number>()) },
     { header: 'Cost ($mm)', accessorKey: 'cost', cell: (c) => mm(c.getValue<number>()) },
-    { header: 'Mark', accessorKey: 'mark', cell: (c) => <span className={c.getValue<number>() != null && c.getValue<number>() < 0.95 ? 'neg' : ''}>{num(c.getValue<number>(), 3)}</span> },
-    { header: 'Δ mark', accessorKey: 'mark_chg', cell: (c) => <span className={cls(c.getValue<number>())}>{signed(c.getValue<number>(), 3)}</span> },
+    { header: 'Mark', accessorKey: 'mark', tip: G.mark, cell: (c) => <span className={c.getValue<number>() != null && c.getValue<number>() < 0.95 ? 'neg' : ''}>{num(c.getValue<number>(), 3)}</span> },
+    { header: 'Mark change', accessorKey: 'mark_chg', tip: 'Mark this quarter minus last quarter.', cell: (c) => <span className={cls(c.getValue<number>())}>{signed(c.getValue<number>(), 3)}</span> },
     { header: 'Rate', accessorKey: 'rate', cell: (c) => pct(c.getValue<number>(), 2) },
     { header: 'Spread', accessorKey: 'spread', cell: (c) => pct(c.getValue<number>(), 2) },
-    { header: 'PIK', accessorKey: 'pik_rate', cell: (c) => pct(c.getValue<number>(), 2) },
+    { header: 'PIK rate', accessorKey: 'pik_rate', tip: G.pik, cell: (c) => pct(c.getValue<number>(), 2) },
     { header: 'Maturity', accessorKey: 'maturity', left: true },
-    { header: 'Obs', accessorKey: 'obs_n' },
+    { header: 'Quarters held', accessorKey: 'obs_n', tip: 'How many quarters we have seen this loan.' },
   ]
 
   return (
@@ -104,6 +117,7 @@ export default function BdcDetail() {
         {!latest.data_ok && <span className="warn"> · detail does not reconcile to reported total; treat metrics with care</span>}
         {s && <> · <span className={`tag ${s.quadrant}`}>{s.quadrant.replace(/_/g, ' ')}</span></>}
       </div>
+      <div className="panel summary">{summary}</div>
       <div className="stats">
         <Stat k="Debt at cost" v={bn(latest.debt_cost)} />
         <Stat k="Debt mark (FV/cost)" v={num(latest.debt_mark, 3)} d={`Δ4q ${signedPct(s?.d4_debt_mark ?? null, 2)}`} />
@@ -119,7 +133,7 @@ export default function BdcDetail() {
 
       <div className="row">
         <div className="panel">
-          <h2>Stress, non-accrual and PIK (% of debt at cost)</h2>
+          <h2>Share of loans in trouble, by quarter (% of debt at cost)</h2>
           <div className="chart">
             <ResponsiveContainer>
               <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -135,7 +149,7 @@ export default function BdcDetail() {
           </div>
         </div>
         <div className="panel">
-          <h2>Debt mark, quality score and price / NAV</h2>
+          <h2>Average mark, book quality (higher = worse) and price / NAV</h2>
           <div className="chart">
             <ResponsiveContainer>
               <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -155,10 +169,10 @@ export default function BdcDetail() {
 
       <div className="row">
         <div className="panel">
-          <h2>Quarterly metrics</h2>
+          <h2>Quarterly metrics <span className="small muted">(hover headers for definitions)</span></h2>
           <div className="tablewrap">
             <table className="grid">
-              <thead><tr><th className="l">Period</th><th>Recon</th><th>Debt</th><th>Mark</th><th>&lt;95</th><th>&lt;90</th><th>&lt;80</th><th>NA</th><th>PIK</th><th>New&lt;95</th><th>New NA</th><th>Markdowns</th><th>Exit loss</th><th>Spread↑</th><th>Extended</th><th>W.spread</th><th>Quality</th><th>NAV/sh</th><th>P/NAV</th></tr></thead>
+              <thead><tr><th className="l">Quarter</th><th className="tip" title={G.recon}>Data check</th><th>Debt at cost</th><th className="tip" title={G.debt_mark}>Avg mark</th><th className="tip" title={G.debt_below_95}>Below 95</th><th className="tip" title={G.debt_below_90}>Below 90</th><th title="Share of loans marked below 80.">Below 80</th><th className="tip" title={G.nonaccrual}>Non-accrual</th><th className="tip" title={G.pik}>PIK</th><th className="tip" title={G.new_deterioration}>Newly below 95</th><th title="Share of loans newly placed on non-accrual this quarter.">New non-accrual</th><th title="Share of loans marked down more than 2 points this quarter.">Marked down</th><th className="tip" title={G.loss_exit}>Exit losses</th><th className="tip" title={G.spread_up}>Spread up</th><th className="tip" title={G.extended}>Extended</th><th title="Cost-weighted average spread over the base rate.">Avg spread</th><th className="tip" title={G.quality}>Book quality</th><th className="tip" title={G.nav}>NAV / share</th><th className="tip" title={G.p_nav}>Price / NAV</th></tr></thead>
               <tbody>
                 {[...data.quarters].reverse().map((qq) => (
                   <tr key={qq.period_end}>
@@ -180,7 +194,7 @@ export default function BdcDetail() {
           </div>
         </div>
         <div className="panel" style={{ flex: '0 1 420px' }}>
-          <h2>Mark migration {migPeriods[0] ? `(${migPeriods[0]}, $mm of debt at cost)` : ''}</h2>
+          <h2 title={G.migration}>Where the loans moved {migPeriods[0] ? `(${migPeriods[0]}, $mm of debt at cost)` : ''}</h2>
           <table className="heat">
             <thead><tr><th>from \ to</th>{BUCKETS.map((b) => <th key={b}>{bucketLabel[b]}</th>)}<th>total</th></tr></thead>
             <tbody>
@@ -202,9 +216,9 @@ export default function BdcDetail() {
           <div className="small muted" style={{ marginTop: 6 }}>Rows: mark bucket last quarter. Columns: this quarter. Red cells = migration to a worse bucket.</div>
           {data.generosity.length > 0 && (
             <>
-              <h2>Marks vs other lenders on shared borrowers</h2>
+              <h2 title={G.generosity}>Marks vs other lenders on the same borrowers</h2>
               <table className="grid">
-                <thead><tr><th className="l">Period</th><th>Shared</th><th>Mark vs peers</th><th>Above</th><th>Below</th><th>Peer NA, not flagged</th></tr></thead>
+                <thead><tr><th className="l">Quarter</th><th title="Borrowers this BDC shares with at least one other BDC.">Shared borrowers</th><th className="tip" title={G.generosity}>Marks vs peers</th><th title="Shared loans this BDC marks 3+ points above the others.">Marked above</th><th title="Shared loans this BDC marks 3+ points below the others.">Marked below</th><th title="Loans another lender has on non-accrual but this BDC does not.">Peers say non-accrual, this BDC does not</th></tr></thead>
                 <tbody>
                   {[...data.generosity].reverse().slice(0, 6).map((g) => (
                     <tr key={g.period_end}><td className="l">{g.period_end}</td><td>{g.n_shared}</td>

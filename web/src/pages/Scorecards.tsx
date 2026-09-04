@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import DataTable, { Col } from '../components/DataTable'
 import { useApi } from '../lib/api'
 import { cls, pct, signedPct } from '../lib/format'
+import { G } from '../lib/glossary'
 
 type R = { cik: number; ticker: string | null; name: string; is_public: boolean; latest_period: string; n_evaluated: number; n_bad: number; bad_rate: number | null; late_mark_rate: number | null; n_new_na: number | null; early_warning_rate: number | null; n_loss_exits: number | null; loss_exit_rate: number | null; generosity_4q: number | null; n_shared: number | null }
 
@@ -12,13 +13,13 @@ export default function Scorecards() {
   const cols: Col<R>[] = [
     { header: 'Lender', accessorKey: 'name', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.cik}`}>{c.row.original.ticker ?? c.getValue<string>()}</Link> },
     { header: 'Public', accessorKey: 'is_public', cell: (c) => c.getValue<boolean>() ? 'yes' : '' },
-    { header: 'Loan-quarters', accessorKey: 'n_evaluated' },
-    { header: 'Went bad', accessorKey: 'bad_rate', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'Late marks', accessorKey: 'late_mark_rate', cell: (c) => <span className={c.getValue<number>() != null && c.getValue<number>() > 0.1 ? 'neg' : ''}>{pct(c.getValue<number>())}</span> },
-    { header: 'Early warning', accessorKey: 'early_warning_rate', cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Loan-quarters', accessorKey: 'n_evaluated', tip: 'Number of loan-quarters with a full year of follow-up. Small samples are excluded.' },
+    { header: 'Went bad', accessorKey: 'bad_rate', tip: G.went_bad, cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Late marks', accessorKey: 'late_mark_rate', tip: G.late_marks, cell: (c) => <span className={c.getValue<number>() != null && c.getValue<number>() > 0.1 ? 'neg' : ''}>{pct(c.getValue<number>())}</span> },
+    { header: 'Early warning', accessorKey: 'early_warning_rate', tip: G.early_warning, cell: (c) => pct(c.getValue<number>()) },
     { header: 'Loss exits', accessorKey: 'n_loss_exits' },
-    { header: 'Loss exit rate', accessorKey: 'loss_exit_rate', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'Marks vs peers', accessorKey: 'generosity_4q', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>(), 2)}</span> },
+    { header: 'Loss exit rate', accessorKey: 'loss_exit_rate', tip: G.loss_exit, cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Marks vs peers', accessorKey: 'generosity_4q', tip: G.generosity, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>(), 2)}</span> },
     { header: 'Shared names', accessorKey: 'n_shared' },
   ]
   return (

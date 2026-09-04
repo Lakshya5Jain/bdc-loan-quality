@@ -3,7 +3,7 @@ import {
 } from '@tanstack/react-table'
 import { useState } from 'react'
 
-export type Col<T> = ColumnDef<T, any> & { left?: boolean; wrap?: boolean }
+export type Col<T> = ColumnDef<T, any> & { left?: boolean; wrap?: boolean; tip?: string }
 
 export default function DataTable<T>({
   data, columns, initialSort, maxRows,
@@ -23,7 +23,7 @@ export default function DataTable<T>({
               {hg.headers.map((h) => {
                 const def = h.column.columnDef as Col<T>
                 return (
-                  <th key={h.id} className={def.left ? 'l' : ''} onClick={h.column.getToggleSortingHandler()}>
+                  <th key={h.id} className={`${def.left ? 'l' : ''} ${def.tip ? 'tip' : ''}`} title={def.tip} onClick={h.column.getToggleSortingHandler()}>
                     {flexRender(h.column.columnDef.header, h.getContext())}
                     {{ asc: ' ▲', desc: ' ▼' }[h.column.getIsSorted() as string] ?? ''}
                   </th>

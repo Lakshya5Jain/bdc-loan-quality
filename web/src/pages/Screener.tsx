@@ -5,6 +5,7 @@ import {
 import DataTable, { Col } from '../components/DataTable'
 import { useApi } from '../lib/api'
 import { cls, num, pct, signed, signedPct } from '../lib/format'
+import { G } from '../lib/glossary'
 
 export type ScreenRow = {
   cik: number; ticker: string; name: string; signal_period: string; quadrant: string
@@ -33,35 +34,33 @@ export default function Screener() {
   const columns: Col<ScreenRow>[] = [
     { header: 'Ticker', accessorKey: 'ticker', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.cik}`}>{c.getValue<string>()}</Link> },
     { header: 'Name', accessorKey: 'name', left: true, cell: (c) => <span className="muted">{c.getValue<string>()}</span> },
-    { header: 'Quadrant', accessorKey: 'quadrant', left: true, cell: (c) => <span className={`tag ${c.getValue<string>()}`}>{c.getValue<string>().replace(/_/g, ' ')}</span> },
-    { header: 'Quality (z)', accessorKey: 'quality_score', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
-    { header: 'Trend 4q', accessorKey: 'quality_trend_4q', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
-    { header: 'Debt <90', accessorKey: 'pct_debt_below_90', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'Δ4q <90', accessorKey: 'd4_pct_debt_below_90', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>())}</span> },
-    { header: 'Non-accrual', accessorKey: 'nonaccrual_pct_cost', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'Δ4q NA', accessorKey: 'd4_nonaccrual_pct_cost', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>())}</span> },
-    { header: 'PIK share', accessorKey: 'pik_share', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'New deter.', accessorKey: 'new_deterioration_rate', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'Debt mark', accessorKey: 'debt_mark', cell: (c) => num(c.getValue<number>(), 3) },
-    { header: 'Generosity', accessorKey: 'generosity', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>(), 2)}</span> },
-    { header: 'P/NAV', accessorKey: 'p_nav', cell: (c) => num(c.getValue<number>()) },
-    { header: 'Ret 3m', accessorKey: 'ret_3m', cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
-    { header: 'Ret 6m', accessorKey: 'ret_6m', cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
-    { header: 'Ret 12m', accessorKey: 'ret_12m', cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
-    { header: 'NAV Δ4q', accessorKey: 'nav_chg_4q', cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
-    { header: 'Div yld', accessorKey: 'div_yield', cell: (c) => pct(c.getValue<number>()) },
-    { header: 'Short score', accessorKey: 'short_score', cell: (c) => num(c.getValue<number>()) },
-    { header: 'Long score', accessorKey: 'long_score', cell: (c) => num(c.getValue<number>()) },
-    { header: 'Period', accessorKey: 'signal_period', cell: (c) => <span className="muted">{c.getValue<string>()}</span> },
+    { header: 'Verdict', accessorKey: 'quadrant', left: true, tip: G.quadrant, cell: (c) => <span className={`tag ${c.getValue<string>()}`}>{c.getValue<string>().replace(/_/g, ' ')}</span> },
+    { header: 'Book quality', accessorKey: 'quality_score', tip: G.quality, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
+    { header: 'Trend (1 yr)', accessorKey: 'quality_trend_4q', tip: G.trend, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
+    { header: 'Loans below 90', accessorKey: 'pct_debt_below_90', tip: G.debt_below_90, cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Below 90, 1 yr change', accessorKey: 'd4_pct_debt_below_90', tip: 'Change in the share of loans below 90 versus four quarters ago.', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>())}</span> },
+    { header: 'Non-accrual', accessorKey: 'nonaccrual_pct_cost', tip: G.nonaccrual + ' Shown as a share of loans by cost.', cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Non-accrual, 1 yr change', accessorKey: 'd4_nonaccrual_pct_cost', tip: 'Change in the non-accrual share versus four quarters ago.', cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>())}</span> },
+    { header: 'PIK share', accessorKey: 'pik_share', tip: G.pik + ' Shown as a share of loans by cost.', cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Newly stressed', accessorKey: 'new_deterioration_rate', tip: G.new_deterioration, cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Avg mark', accessorKey: 'debt_mark', tip: G.debt_mark, cell: (c) => num(c.getValue<number>(), 3) },
+    { header: 'Marks vs peers', accessorKey: 'generosity', tip: G.generosity, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signedPct(c.getValue<number>(), 2)}</span> },
+    { header: 'Price / NAV', accessorKey: 'p_nav', tip: G.p_nav, cell: (c) => num(c.getValue<number>()) },
+    { header: 'Return 3m', accessorKey: 'ret_3m', tip: G.ret, cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
+    { header: 'Return 6m', accessorKey: 'ret_6m', tip: G.ret, cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
+    { header: 'Return 12m', accessorKey: 'ret_12m', tip: G.ret, cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
+    { header: 'NAV, 1 yr change', accessorKey: 'nav_chg_4q', tip: G.nav_chg, cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
+    { header: 'Dividend yield', accessorKey: 'div_yield', tip: G.div_yield, cell: (c) => pct(c.getValue<number>()) },
+    { header: 'Short score', accessorKey: 'short_score', tip: G.short_score, cell: (c) => num(c.getValue<number>()) },
+    { header: 'Long score', accessorKey: 'long_score', tip: G.long_score, cell: (c) => num(c.getValue<number>()) },
+    { header: 'Data as of', accessorKey: 'signal_period', tip: 'The latest quarter this BDC has filed. Prices are current.', cell: (c) => <span className="muted">{c.getValue<string>()}</span> },
   ]
   const scatter = data.filter((d) => d.p_nav != null && d.quality_trend_4q != null)
   return (
     <div>
       <h1>Screener</h1>
-      <div className="sub">
-        Public BDCs with a current loan-quality score. Quality is a cross-sectional z-score of stressed, non-accrual,
-        PIK and newly deteriorating debt (higher = worse); Trend 4q is its change over four quarters. Shorts: worsening
-        books at or above median P/NAV whose price has not lagged. Longs: cleaner books trading in the cheapest 30% on P/NAV.
+      <div className="help">
+        <b>How to read this.</b> One row per publicly traded BDC. The left half describes the loan book: how many loans the BDC itself marks as impaired, how many have stopped paying, and whether that is getting worse. The right half is the stock: price versus book value and recent returns. A <b>short</b> case is a worsening book that the stock has not priced yet. A <b>long</b> case is a clean book at a discount. Hover any column header for its definition, or see the <a href="/glossary">glossary</a>. Higher book quality and trend numbers mean <i>worse</i>.
       </div>
       <div className="row">
         <div className="panel">
