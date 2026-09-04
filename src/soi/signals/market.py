@@ -89,6 +89,7 @@ def build_screen(con: duckdb.DuckDBPyConnection) -> str:
             LEFT JOIN nav4 n4 ON n4.cik = b.cik AND n4.period_end = ln.nav_period
             LEFT JOIN market.price_points pp ON pp.ticker = b.ticker
             WHERE b.is_public
+              AND b.period_end >= (SELECT max(period_end) FROM core.holdings) - INTERVAL 200 DAY
         ),
         ranked AS (
             SELECT base.*,

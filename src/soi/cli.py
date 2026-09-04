@@ -74,16 +74,26 @@ def build_screen():
         typer.echo(_b(con))
 
 
+@build_app.command("insights")
+def build_insights_cmd():
+    from soi.db import db
+    from soi.signals.insights import build_insights as _b
+
+    with db() as con:
+        typer.echo(_b(con))
+
+
 @build_app.command("all")
 def build_all():
     from soi.db import db
     from soi.signals.bdc_rollup import build_signals
+    from soi.signals.insights import build_insights
     from soi.signals.market import build_screen
     from soi.transform.holdings import build_holdings
     from soi.transform.link_loans import build_loans
 
     with db() as con:
-        for step in (build_holdings, build_loans, build_signals, build_screen):
+        for step in (build_holdings, build_loans, build_signals, build_screen, build_insights):
             typer.echo(step(con))
 
 

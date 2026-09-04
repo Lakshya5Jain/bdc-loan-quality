@@ -176,6 +176,15 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
         "excluded": _rows(status["excluded"]),
     })
     put("screen.json", _rows(api.screen()))
+    wl = api.watchlists()
+    put("insights/watchlists.json", {"stocks": _rows(wl["stocks"]), "loans": _rows(wl["loans"])})
+    v = api.validation()
+    put("insights/validation.json", {"meta": _row(v["meta"]), "loan_signals": _rows(v["loan_signals"]),
+                                     "bdc_backtest": _rows(v["bdc_backtest"])})
+    put("insights/scorecards.json", _rows(api.scorecards()))
+    sec = api.sectors()
+    put("insights/sectors.json", {"latest_period": _clean(sec["latest_period"]), "sectors": _rows(sec["sectors"]),
+                                  "sector_history": _rows(sec["sector_history"]), "vintages": _rows(sec["vintages"])})
     bdcs = api.bdcs(public_only=False)
     put("bdcs.json", _rows(bdcs))
     log(f"top-level: {len(bdcs)} BDCs, {len(status['files'])} source files")
@@ -190,6 +199,7 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
             "migration": _rows(d["migration"]),
             "generosity": _rows(d["generosity"]),
             "screen": _row(d["screen"]) if d["screen"] else None,
+            "scorecard": _row(d["scorecard"]) if d.get("scorecard") else None,
         })
     log(f"bdc detail: {len(ciks)} files")
 
@@ -223,6 +233,10 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
     for h in history:
         hist_by_loan[h["loan_id"]].append(h)
     del history
+    risk_by_loan: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in db.rows("SELECT loan_id, period_end, risk_score, reasons FROM signals.loan_risk ORDER BY loan_id, period_end"):
+        risk_by_loan[r["loan_id"]].append({"period_end": _clean(r["period_end"]), "risk_score": r["risk_score"],
+                                           "reasons": list(r["reasons"] or [])})
     shards: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for ln in loans:
         shards[loan_shard(ln["loan_id"])].append(ln)
@@ -232,7 +246,8 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
         entries = {}
         for ln in lns:
             t = _table(hist_by_loan.get(ln["loan_id"], []), HISTORY_COLS, fnd)
-            entries[ln["loan_id"]] = {"loan": _row(ln), "history": t["rows"]}
+            entries[ln["loan_id"]] = {"loan": _row(ln), "history": t["rows"],
+                                      "risk": risk_by_loan.get(ln["loan_id"], [])}
         put(f"loans/{shard}.json",
             {"footnotes": fnd.notes, "history_cols": hist_cols, "loans": entries})
     log(f"loan shards: {len(shards)} files, {len(loans):,} loans")

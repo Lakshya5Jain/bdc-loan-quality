@@ -14,7 +14,7 @@ type Hist = {
 type Peer = { cik: number; ticker: string | null; name: string; period_end: string; instrument_type: string; fv: number; cost: number; mark: number | null; nonaccrual: boolean; mark_vs_peers: number | null }
 type Detail = {
   loan: { loan_id: string; cik: number; bdc_name: string; ticker: string | null; issuer_name: string; borrower_key: string; instrument_type: string; identifier: string; first_period: string; last_period: string; n_periods: number; exited: boolean; exit_type: string | null; last_mark: number | null; min_mark: number | null; ever_nonaccrual: boolean; industry: string | null }
-  history: Hist[]; peers: Peer[]
+  history: Hist[]; peers: Peer[]; risk: { period_end: string; risk_score: number; reasons: string[] }[]
 }
 
 export default function LoanDetail() {
@@ -42,6 +42,9 @@ export default function LoanDetail() {
         <Stat k="Observed" v={`${l.n_periods} quarters`} d={`${l.first_period} → ${l.last_period}${l.exited ? ` · exited (${l.exit_type})` : ''}`} />
         <Stat k="Last mark" v={num(l.last_mark, 3)} d={`min ${num(l.min_mark, 3)}`} cls={l.last_mark != null && l.last_mark < 0.95 ? 'neg' : ''} />
         <Stat k="Ever non-accrual" v={l.ever_nonaccrual ? 'yes' : 'no'} cls={l.ever_nonaccrual ? 'neg' : ''} />
+        {data.risk.length > 0 && (
+          <Stat k="Risk score (latest)" v={data.risk[data.risk.length - 1].risk_score} d={data.risk[data.risk.length - 1].reasons.join('; ') || 'no warning signals'} cls={data.risk[data.risk.length - 1].risk_score >= 40 ? 'neg' : ''} />
+        )}
       </div>
       <div className="row">
         <div className="panel">

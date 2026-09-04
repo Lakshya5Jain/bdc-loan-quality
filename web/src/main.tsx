@@ -9,6 +9,10 @@ import LoanDetail from './pages/LoanDetail'
 import Borrowers from './pages/Borrowers'
 import BorrowerDetail from './pages/BorrowerDetail'
 import Status from './pages/Status'
+import Insights from './pages/Insights'
+import Validation from './pages/Validation'
+import Sectors from './pages/Sectors'
+import Scorecards from './pages/Scorecards'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -23,6 +27,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="borrowers" element={<Borrowers />} />
           <Route path="borrowers/:key" element={<BorrowerDetail />} />
           <Route path="status" element={<Status />} />
+          <Route path="insights" element={<Insights />} />
+          <Route path="validation" element={<Validation />} />
+          <Route path="sectors" element={<Sectors />} />
+          <Route path="scorecards" element={<Scorecards />} />
         </Route>
       </Routes>
     </BrowserRouter>

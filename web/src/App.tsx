@@ -6,9 +6,12 @@ export default function App() {
       <header className="topbar">
         <div className="brand">BDC Loan Quality</div>
         <nav>
+          <NavLink to="/insights">Watchlists</NavLink>
           <NavLink to="/" end>Screener</NavLink>
           <NavLink to="/bdcs">BDCs</NavLink>
           <NavLink to="/borrowers">Borrowers</NavLink>
+          <NavLink to="/sectors">Sectors</NavLink>
+          <NavLink to="/scorecards">Lenders</NavLink>
           <NavLink to="/status">Data</NavLink>
         </nav>
       </header>

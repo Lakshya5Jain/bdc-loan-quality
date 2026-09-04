@@ -120,6 +120,7 @@ async function staticGet<T>(url: string): Promise<T> {
   if (a === 'status') return load<T>('/status.json')
   if (a === 'screen') return load<T>('/screen.json')
   if (a === 'health') return { ok: true } as T
+  if (a === 'insights' && b) return load<T>(`/insights/${b}.json`)
 
   if (a === 'bdcs' && !b) {
     const rows = await load<Row[]>('/bdcs.json')
@@ -161,7 +162,8 @@ async function staticGet<T>(url: string): Promise<T> {
           ? cmpNullLast(x.mark, y.mark)
           : (x.period_end as string) < (y.period_end as string) ? 1 : -1,
       )
-    return { loan: e.loan, history, peers } as T
+    const risk = (e as { risk?: Row[] }).risk ?? []
+    return { loan: e.loan, history, peers, risk } as T
   }
 
   if (a === 'borrowers' && !b) {

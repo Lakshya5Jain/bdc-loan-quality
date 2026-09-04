@@ -94,8 +94,9 @@ def bdc_detail(cik: int):
         "SELECT * FROM signals.bdc_generosity WHERE cik = ? ORDER BY period_end", [cik]
     )
     screen_row = db.one(f"SELECT {SCREEN_COLS} FROM market.screen WHERE cik = ?", [cik])
+    scorecard = db.one("SELECT * FROM signals.lender_scorecard WHERE cik = ?", [cik])
     return {"bdc": bdc, "quarters": quarters, "migration": migration, "generosity": generosity,
-            "screen": screen_row}
+            "screen": screen_row, "scorecard": scorecard}
 
 
 @app.get("/api/bdcs/{cik}/loans")
@@ -167,7 +168,11 @@ def loan_detail(loan_id: str):
         """,
         [loan["borrower_key"]],
     )
-    return {"loan": loan, "history": history, "peers": peers}
+    risk = db.rows(
+        "SELECT period_end, risk_score, reasons FROM signals.loan_risk WHERE loan_id = ? ORDER BY period_end",
+        [loan_id],
+    )
+    return {"loan": loan, "history": history, "peers": peers, "risk": risk}
 
 
 @app.get("/api/borrowers")
@@ -209,6 +214,75 @@ def borrower_detail(key: str):
         [key],
     )
     return {"borrower_key": key, "loans": loans, "marks": marks}
+
+
+@app.get("/api/insights/watchlists")
+def watchlists():
+    stocks = db.rows(
+        """
+        SELECT cik, ticker, name, side, quadrant, quality_score, quality_trend_4q, validated_score, wavg_risk,
+               pct_debt_below_90, nonaccrual_pct_cost, pik_share, new_deterioration_rate, generosity,
+               late_mark_rate, early_warning_rate, loss_exit_rate, p_nav, ret_6m, ret_12m, div_yield,
+               nav_chg_4q, signal_period, reasons
+        FROM signals.watchlist_stocks ORDER BY side NULLS LAST, validated_score DESC NULLS LAST
+        """
+    )
+    loans = db.rows(
+        """
+        SELECT list, loan_id, cik, ticker, bdc_name, is_public, issuer_name, issuer_norm AS borrower_key,
+               industry, instrument_type, period_end, cost, fair_value, mark, risk_score, reasons,
+               n_bdcs, peer_avg_mark, mark_vs_peers
+        FROM signals.watchlist_loans
+        ORDER BY list, risk_score DESC, cost DESC
+        """
+    )
+    return {"stocks": stocks, "loans": loans}
+
+
+@app.get("/api/insights/validation")
+def validation():
+    return {
+        "meta": db.one("SELECT base_rate, n_loan_quarters, fitted_on FROM signals.model_meta"),
+        "loan_signals": db.rows("SELECT * FROM signals.signal_validation ORDER BY lift DESC"),
+        "bdc_backtest": db.rows("SELECT * FROM signals.bdc_backtest ORDER BY weight DESC"),
+    }
+
+
+@app.get("/api/insights/scorecards")
+def scorecards():
+    return db.rows(
+        "SELECT * FROM signals.lender_scorecard WHERE n_evaluated >= 50 ORDER BY is_public DESC, late_mark_rate DESC NULLS LAST"
+    )
+
+
+@app.get("/api/insights/sectors")
+def sectors():
+    # latest quarter that most BDCs have filed (a new quarter starts with a handful of early filers)
+    latest = db.one(
+        """
+        WITH t AS (SELECT period_end, sum(cost) AS c FROM signals.sector_quarter GROUP BY 1)
+        SELECT max(period_end) AS p FROM t WHERE c >= 0.5 * (SELECT max(c) FROM t)
+        """
+    )["p"]
+    return {
+        "latest_period": latest,
+        "sectors": db.rows(
+            """
+            SELECT s.*, s.pct_stressed - lag(s.pct_stressed, 4) OVER (PARTITION BY industry ORDER BY period_end) AS d4_pct_stressed
+            FROM signals.sector_quarter s
+            QUALIFY period_end = ? AND cost > 1e8 ORDER BY wavg_risk DESC NULLS LAST
+            """,
+            [latest],
+        ),
+        "sector_history": db.rows(
+            "SELECT industry, period_end, cost, mark, pct_stressed, pct_nonaccrual, wavg_risk FROM signals.sector_quarter "
+            "WHERE industry IN (SELECT industry FROM signals.sector_quarter WHERE period_end = ? AND cost > 1e9) ORDER BY 1, 2",
+            [latest],
+        ),
+        "vintages": db.rows(
+            "SELECT * FROM signals.vintage_quarter WHERE period_end = ? AND vintage >= 2019 ORDER BY vintage", [latest]
+        ),
+    }
 
 
 @app.get("/api/health")
