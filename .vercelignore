@@ -1,0 +1,12 @@
+# Only web/ is deployed; the Python backend is not a Vercel function
+api
+src
+tests
+data
+scripts
+notebooks
+.venv
+pyproject.toml
+uv.lock
+.python-version
+*.duckdb
