@@ -58,3 +58,4 @@ table.grid th.tip { text-decoration: underline dotted #9ca3af; text-underline-of
 .summary { font-size: 14px; line-height: 1.5; margin: 6px 0 14px; }
 .glossary dt { font-weight: 600; margin-top: 10px; }
 .glossary dd { margin: 2px 0 0 0; color: #374151; max-width: 900px; }
+.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px 20px 24px; border-top: 1px solid var(--line); margin-top: auto; }

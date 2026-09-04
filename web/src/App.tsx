@@ -19,6 +19,7 @@ export default function App() {
       <main className="content">
         <Outlet />
       </main>
+      <footer className="footer">Made by Laksh Jain · Data: SEC EDGAR XBRL filings and public market prices · For research only, not investment advice</footer>
     </div>
   )
 }
