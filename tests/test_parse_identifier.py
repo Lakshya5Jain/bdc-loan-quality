@@ -57,6 +57,23 @@ CASES = [
     ("Titan BW Borrower L.P. | One stop 3 | Non-Affiliated Issuer", "Titan BW Borrower L.P",
      "first_lien", True),
     ("Sphera Solutions Inc | Software & Services 1", "Sphera Solutions Inc", "unknown", False),
+    # co-borrower names containing instrument words must not drive classification
+    ("Absolute Dental Group LLC and Absolute Dental Equity, LLC | First lien senior secured loan",
+     "Absolute Dental Group LLC and Absolute Dental Equity LLC", "first_lien", True),
+    ("Zeppelin US Buyer Inc. and Providence Equity Partners IX-C L.P. | First lien senior secured loan 1",
+     "Zeppelin US Buyer Inc. and Providence Equity Partners IX-C L.P.", "first_lien", True),
+    ("Diligent Corporation and Diligent Preferred Issuer, Inc. | First lien senior secured revolving loan",
+     "Diligent Corporation and Diligent Preferred Issuer Inc.", "first_lien", True),
+    ("Harris Preston Fund Investments | LP Interests (HPEP 3, L.P.)", "Harris Preston Fund Investments", "equity", False),
+    ("EIG Fund Investments | LP Interests (EIG Global Private Debt Fund-A, L.P.)", "EIG Fund Investments", "equity", False),
+    ("Windows Entities | LLC Units", "Windows Entities", "equity", False),
+    ("Packaging Coordinators Midco, Inc. | First lien senior secured loan | Non-Affiliated Issuer",
+     "Packaging Coordinators Midco Inc.", "first_lien", True),
+    ("MS Private Loan Fund I, LP | LP Interests", "MS Private Loan Fund I LP", "equity", False),
+    ("Ivy Hill Asset Management, L.P. | Member interest", "Ivy Hill Asset Management L.P.", "equity", False),
+    ("RL Datix Holdings (USA), Inc. | First lien senior secured loan", "RL Datix Holdings Inc.", "first_lien", True),
+    ("Integrity Marketing Acquisition, LLC |First lien senior secured loan | Non-Affiliated Issuer",
+     "Integrity Marketing Acquisition LLC", "first_lien", True),
 ]
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import duckdb
 import polars as pl
 
+from soi.db import table_exists
 from soi.transform.parse_identifier import candidate_parents, classify_member, parse_identifier
 
 IDENT_RE = r"InvestmentIdentifierAxis\([^)]*\)=(.*?)\(\)(?:;|$)"
@@ -54,17 +55,25 @@ MEMBER_AXES = {
     "LegalEntityAxis": "legal_entity_member",
 }
 
-# A footnote marks a holding as non-accrual when it is a short, specific note (not boilerplate
-# such as "unless otherwise indicated, no investment is on non-accrual").
 # a non-zero PIK rate written next to "PIK" ("4.42% PIK", "PIK 2.50%", "SOFR + 5.00% (2.00% PIK)")
 PIK_TEXT_RE = (
     r"(?i)(([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)\s?%\s*(cash\s*/\s*)?PIK\b"
     r"|\bPIK[^%\d]{0,10}([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)\s?%)"
 )
-NONACCRUAL_RE = r"(?i)non[- ]?accrual"
+
+# A footnote marks a holding as non-accrual when it is a short note saying THIS investment is on
+# non-accrual (not boilerplate such as "excludes those on non-accrual" or "net of non-accrual
+# amounts"). Both regexes are applied per individual footnote.
+NONACCRUAL_RE = (
+    r"(?i)((was|is|were|are|has been|have been|remain(s|ed)?|currently|placed|put) (on|in) non-?\s?accrual"
+    r"|on non-?\s?accrual status|non-?\s?accrual or non-?\s?income|^\W*non-?\s?accrual\b"
+    r"|non-?\s?accrual (investment|loan|asset|debt)s?\W*$|placed .{0,40} on non-?\s?accrual"
+    r"|non-?\s?accrual status as of)"
+)
 NONACCRUAL_NEG_RE = (
-    r"(?i)(unless otherwise|not on non|no longer|removed from|other than|except|"
-    r"none of|was not|were not|are not|is not|do not|does not|not been placed)"
+    r"(?i)(exclud|net of|generally|may be|unless|other than|except|not on non|no longer|removed|"
+    r"restored|no income|is recognized|based on the estimated|guaranteed non|were not|was not|"
+    r"are not|is not|none of)"
 )
 
 
@@ -147,6 +156,16 @@ def build_filings(con: duckdb.DuckDBPyConnection) -> None:
 
 def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
     build_filings(con)
+    # Rates are decimals (0.0842). Some filers tag them in percent (8.42) or basis points (842).
+    con.execute(
+        """
+        CREATE OR REPLACE TEMP MACRO fix_rate(x) AS
+            CASE WHEN x IS NULL THEN NULL
+                 WHEN abs(x) > 100 THEN x / 10000
+                 WHEN abs(x) > 1 THEN x / 100
+                 ELSE x END
+        """
+    )
 
     num_cols = ",\n".join(
         f"max(value) FILTER (WHERE tag = '{t}') AS {c}" for t, c in NUM_TAGS.items()
@@ -199,6 +218,14 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         WHERE identifier <> '' AND trim(footnote) <> ''
         """
     )
+    if table_exists(con, "raw", "ix_footnotes"):
+        con.execute(
+            """
+            INSERT INTO footnotes
+            SELECT adsh, period_end AS ddate, identifier, '' AS legal_entity, footnote
+            FROM raw.ix_footnotes WHERE trim(footnote) <> ''
+            """
+        )
     con.execute(
         """
         CREATE OR REPLACE TEMP TABLE footnote_agg AS
@@ -308,115 +335,172 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         pl.DataFrame(member_rows, schema={"type_member": pl.Utf8, "m_type": pl.Utf8, "m_is_debt": pl.Boolean}),
     )
 
-    # Issuer-level subtotal rows: an identifier that is a prefix (at a separator) of other
-    # identifiers in the same filing/period and whose fair value equals the children's sum.
+    # ---- exclusion rules -------------------------------------------------------------------
+    # Every rule appends (adsh, ddate, identifier, legal_entity, reason) to `excluded`. Rules run
+    # in order and each one only looks at rows not yet excluded ("live").
     con.execute(
         """
-        CREATE OR REPLACE TEMP TABLE subtotal_rows AS
-        SELECT p.adsh, p.ddate, p.identifier, p.legal_entity
-        FROM pivot_num p
-        JOIN (
-            SELECT c.adsh, c.ddate, c.legal_entity, ip.parent AS identifier,
-                   sum(c.fair_value) AS child_fv, sum(c.cost) AS child_cost, count(*) AS n_child
-            FROM pivot_num c JOIN ident_parents ip ON ip.identifier = c.identifier
-            GROUP BY 1, 2, 3, 4
-        ) ch ON ch.adsh = p.adsh AND ch.ddate = p.ddate AND ch.identifier = p.identifier
-            AND ch.legal_entity = p.legal_entity
-        WHERE (p.fair_value IS NOT NULL AND ch.child_fv IS NOT NULL
-               AND abs(p.fair_value - ch.child_fv) <= 0.01 * greatest(abs(p.fair_value), 1))
-           OR (p.fair_value IS NULL AND p.cost IS NOT NULL AND ch.child_cost IS NOT NULL
-               AND abs(p.cost - ch.child_cost) <= 0.01 * greatest(abs(p.cost), 1))
-        """
-    )
-    # Issuer-level total rows written in a different format from the instrument rows
-    # (e.g. "PennantPark Senior Loan Fund, LLC" vs "Investments in ... Issuer Name PennantPark ...").
-    # A row is a subtotal when its fair value equals the sum of the *other* rows of the same
-    # issuer in the same filing/period and it carries no instrument-level facts of its own.
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE issuer_sum_rows AS
-        WITH h AS (
-            SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, n.fair_value, n.cost,
-                   p.issuer_norm,
-                   (n.principal IS NULL AND n.rate IS NULL AND n.spread IS NULL
-                    AND n.shares IS NULL) AS bare
-            FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
-            WHERE p.issuer_norm IS NOT NULL AND p.issuer_norm <> ''
-              AND NOT EXISTS (SELECT 1 FROM subtotal_rows s WHERE s.adsh = n.adsh
-                              AND s.ddate = n.ddate AND s.identifier = n.identifier
-                              AND s.legal_entity = n.legal_entity)
-        ),
-        agg AS (
-            SELECT adsh, ddate, legal_entity, issuer_norm, sum(fair_value) AS tot_fv,
-                   sum(cost) AS tot_cost, count(*) AS n
-            FROM h GROUP BY 1, 2, 3, 4
+        CREATE OR REPLACE TEMP TABLE excluded (
+            adsh VARCHAR, ddate DATE, identifier VARCHAR, legal_entity VARCHAR, reason VARCHAR
         )
-        SELECT h.adsh, h.ddate, h.identifier, h.legal_entity
-        FROM h JOIN agg a ON a.adsh = h.adsh AND a.ddate = h.ddate
-             AND a.legal_entity = h.legal_entity AND a.issuer_norm = h.issuer_norm
-        WHERE a.n >= 2 AND h.bare AND h.fair_value IS NOT NULL AND h.fair_value > 0
-          AND (abs(h.fair_value - (a.tot_fv - h.fair_value)) <= 0.01 * h.fair_value
-               OR EXISTS (SELECT 1 FROM h o WHERE o.adsh = h.adsh AND o.ddate = h.ddate
-                          AND o.legal_entity = h.legal_entity AND o.issuer_norm = h.issuer_norm
-                          AND o.identifier <> h.identifier AND NOT o.bare
-                          AND abs(o.fair_value - h.fair_value) <= 0.001 * h.fair_value))
-        """
-    )
-    # The same holding tagged under identifier variants ("X", "X 1", "X | Affiliated Issuer"):
-    # identical issuer, fair value and cost -> keep the variant carrying the most facts.
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE variant_dupes AS
-        WITH h AS (
-            SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, n.fair_value, n.cost,
-                   p.issuer_norm,
-                   regexp_replace(regexp_replace(p.ident_key,
-                       '\\s*\\|\\s*(non-?)?affiliated? issuer\\s*$', ''), '\\s+\\d{1,3}$', '') AS base_key,
-                   (n.principal IS NOT NULL)::INT + (n.rate IS NOT NULL)::INT
-                     + (n.spread IS NOT NULL)::INT + (n.shares IS NOT NULL)::INT
-                     + (n.pct_net_assets IS NOT NULL)::INT AS n_facts
-            FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
-            WHERE n.fair_value IS NOT NULL AND n.fair_value > 0 AND n.cost IS NOT NULL
-        ),
-        ranked AS (
-            SELECT *, row_number() OVER (
-                       PARTITION BY adsh, ddate, legal_entity, issuer_norm, base_key, fair_value, cost
-                       ORDER BY n_facts DESC, length(identifier) DESC, identifier) AS rn
-            FROM h
-        )
-        SELECT adsh, ddate, identifier, legal_entity FROM ranked WHERE rn > 1
-        """
-    )
-    # Same identifier reported both with and without a LegalEntityAxis member: keep the
-    # consolidated (no legal entity) row only.
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE le_dupes AS
-        SELECT a.adsh, a.ddate, a.identifier, a.legal_entity
-        FROM pivot_num a JOIN pivot_num b
-          ON a.adsh = b.adsh AND a.ddate = b.ddate AND a.identifier = b.identifier
-         AND a.legal_entity <> '' AND b.legal_entity = ''
         """
     )
     con.execute(
         """
-        CREATE OR REPLACE TEMP TABLE excluded AS
-        SELECT adsh, ddate, identifier, legal_entity, 'issuer_subtotal' AS reason FROM subtotal_rows
-        UNION ALL
-        SELECT adsh, ddate, identifier, legal_entity, 'issuer_sum' FROM issuer_sum_rows
-        UNION ALL
-        SELECT adsh, ddate, identifier, legal_entity, 'variant_dupe' FROM variant_dupes
-        UNION ALL
-        SELECT adsh, ddate, identifier, legal_entity, 'legal_entity_dupe' FROM le_dupes
-        UNION ALL
-        SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, 'total_row'
-        FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier WHERE p.is_total_row
+        CREATE OR REPLACE TEMP MACRO is_live(a, d, i, l) AS
+            NOT EXISTS (SELECT 1 FROM excluded e WHERE e.adsh = a AND e.ddate = d
+                        AND e.identifier = i AND e.legal_entity = l)
         """
     )
 
-    # Some filers embed a JV's schedule in the same contexts as their own (no extra axis).
-    # Those rows are written in a different format; when the detail overshoots the reported
-    # total, drop whole format clusters (largest clusters kept first) until it reconciles.
+    # R1. Rows that carry neither cost nor fair value are not holdings (unfunded-commitment
+    #     tables, affiliate roll-forwards, footnote prose). Commitments are kept separately.
+    con.execute(
+        """
+        INSERT INTO excluded
+        SELECT adsh, ddate, identifier, legal_entity, 'no_values'
+        FROM pivot_num WHERE cost IS NULL AND fair_value IS NULL
+        """
+    )
+    # R2. Cost missing and fair value <= 0: the unamortized-fee marks of unfunded commitments
+    #     that some filers tag per commitment line (the SOI already totals them).
+    con.execute(
+        """
+        INSERT INTO excluded
+        SELECT adsh, ddate, identifier, legal_entity, 'no_cost_nonpositive_fv'
+        FROM pivot_num n WHERE cost IS NULL AND fair_value <= 0
+          AND is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        """
+    )
+    # R3. In filings that tag cost on (almost) every holding, a row with fair value but no cost
+    #     comes from a note table (affiliate schedules, roll-forwards) and duplicates a holding.
+    con.execute(
+        """
+        INSERT INTO excluded
+        WITH live AS (
+            SELECT * FROM pivot_num n WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        ),
+        cov AS (
+            SELECT adsh, ddate, count(cost) * 1.0 / count(*) AS cost_cov, count(*) AS n
+            FROM live GROUP BY 1, 2
+        )
+        SELECT l.adsh, l.ddate, l.identifier, l.legal_entity, 'fv_only_note_row'
+        FROM live l JOIN cov c ON c.adsh = l.adsh AND c.ddate = l.ddate
+        WHERE l.cost IS NULL AND l.fair_value > 0 AND c.cost_cov >= 0.9 AND c.n >= 20
+        """
+    )
+    # R3b. Pipe-format filers ("Issuer | instrument | affiliation"): a row whose identifier has
+    #      no instrument segment, for an issuer that also has proper instrument rows, is an
+    #      issuer-level aggregate scraped from a note (roll-forwards, "largest investment" prose).
+    con.execute(
+        """
+        INSERT INTO excluded
+        WITH live AS (
+            SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, p.issuer_norm,
+                   position('|' IN n.identifier) > 0 AS piped,
+                   p.instrument_type = 'unknown' AS no_instrument_words
+            FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
+            WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        ),
+        fmt AS (
+            SELECT adsh, ddate, avg(piped::INT) AS piped_share, count(*) AS n
+            FROM live GROUP BY 1, 2
+        ),
+        piped_issuers AS (
+            SELECT DISTINCT adsh, ddate, issuer_norm FROM live WHERE piped AND issuer_norm <> ''
+        )
+        SELECT l.adsh, l.ddate, l.identifier, l.legal_entity, 'unpiped_issuer_row'
+        FROM live l
+        JOIN fmt f ON f.adsh = l.adsh AND f.ddate = l.ddate
+        JOIN piped_issuers pi ON pi.adsh = l.adsh AND pi.ddate = l.ddate AND pi.issuer_norm = l.issuer_norm
+        WHERE NOT l.piped AND l.no_instrument_words AND f.piped_share >= 0.9 AND f.n >= 20
+        """
+    )
+    # R4. Total / category rows recognised from the identifier text.
+    con.execute(
+        """
+        INSERT INTO excluded
+        SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, 'total_row'
+        FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
+        WHERE p.is_total_row AND is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        """
+    )
+    # R5. Same identifier reported both with and without a LegalEntityAxis member: keep the
+    #     consolidated (no legal entity) row only.
+    con.execute(
+        """
+        INSERT INTO excluded
+        SELECT a.adsh, a.ddate, a.identifier, a.legal_entity, 'legal_entity_dupe'
+        FROM pivot_num a JOIN pivot_num b
+          ON a.adsh = b.adsh AND a.ddate = b.ddate AND a.identifier = b.identifier
+         AND a.legal_entity <> '' AND b.legal_entity = ''
+        WHERE is_live(a.adsh, a.ddate, a.identifier, a.legal_entity)
+        """
+    )
+    # R6. Issuer-level subtotal rows: an identifier that is a prefix (at a separator) of other
+    #     identifiers in the same filing/period whose fair value AND cost equal the children's
+    #     sums. With a single child the parent must carry no instrument-level facts of its own
+    #     (otherwise it is a sibling tranche that happens to have the same amounts).
+    con.execute(
+        """
+        INSERT INTO excluded
+        WITH live AS (
+            SELECT * FROM pivot_num n WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        ),
+        ch AS (
+            SELECT c.adsh, c.ddate, c.legal_entity, ip.parent AS identifier,
+                   sum(c.fair_value) AS child_fv, sum(c.cost) AS child_cost, count(*) AS n_child,
+                   count(c.cost) AS n_child_cost
+            FROM live c JOIN ident_parents ip ON ip.identifier = c.identifier
+            GROUP BY 1, 2, 3, 4
+        )
+        SELECT p.adsh, p.ddate, p.identifier, p.legal_entity, 'issuer_subtotal'
+        FROM live p
+        JOIN ch ON ch.adsh = p.adsh AND ch.ddate = p.ddate AND ch.identifier = p.identifier
+               AND ch.legal_entity = p.legal_entity
+        WHERE p.fair_value IS NOT NULL AND ch.child_fv IS NOT NULL
+          AND abs(p.fair_value - ch.child_fv) <= 0.01 * greatest(abs(p.fair_value), 1)
+          AND (p.cost IS NULL OR ch.n_child_cost = 0
+               OR abs(p.cost - ch.child_cost) <= 0.01 * greatest(abs(p.cost), 1))
+          AND (ch.n_child >= 2
+               OR (p.principal IS NULL AND p.rate IS NULL AND p.spread IS NULL
+                   AND p.shares IS NULL AND p.pik_rate IS NULL))
+        """
+    )
+    # R7. Issuer-level total rows written in a different format from the instrument rows
+    #     ("PennantPark Senior Loan Fund, LLC" vs "Investments in ... Issuer Name PennantPark ...").
+    #     A bare row (no instrument facts) whose fair value and cost equal the sums of at least
+    #     two other rows of the same issuer.
+    con.execute(
+        """
+        INSERT INTO excluded
+        WITH live AS (
+            SELECT n.*, p.issuer_norm,
+                   (n.principal IS NULL AND n.rate IS NULL AND n.spread IS NULL
+                    AND n.shares IS NULL AND n.pik_rate IS NULL) AS bare
+            FROM pivot_num n JOIN parsed_idents p ON p.identifier = n.identifier
+            WHERE p.issuer_norm IS NOT NULL AND p.issuer_norm <> ''
+              AND is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        ),
+        agg AS (
+            SELECT adsh, ddate, legal_entity, issuer_norm, sum(fair_value) AS tot_fv,
+                   sum(cost) AS tot_cost, count(*) AS n, count(cost) AS n_cost
+            FROM live GROUP BY 1, 2, 3, 4
+        )
+        SELECT h.adsh, h.ddate, h.identifier, h.legal_entity, 'issuer_sum'
+        FROM live h JOIN agg a ON a.adsh = h.adsh AND a.ddate = h.ddate
+             AND a.legal_entity = h.legal_entity AND a.issuer_norm = h.issuer_norm
+        WHERE a.n >= 3 AND h.bare AND h.fair_value IS NOT NULL AND h.fair_value > 0
+          AND abs(h.fair_value - (a.tot_fv - h.fair_value)) <= 0.01 * h.fair_value
+          AND (h.cost IS NULL OR a.n_cost <= 1
+               OR abs(h.cost - (a.tot_cost - h.cost)) <= 0.01 * greatest(h.cost, 1))
+        """
+    )
+    # R9. A JV / senior-loan-program schedule tagged in the same contexts as the BDC's own
+    #     schedule (no distinguishing axis) is written in a different format. When the live
+    #     detail still overshoots the reported total by >5%, drop whole format clusters — but
+    #     only large, multi-issuer clusters (a genuine second schedule), never small groups of
+    #     rows that merely share their first words.
     con.execute(
         """
         CREATE OR REPLACE TEMP TABLE filing_totals AS
@@ -432,25 +516,47 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
     clusters = con.execute(
         """
         WITH live AS (
-            SELECT n.* FROM pivot_num n
-            WHERE NOT EXISTS (SELECT 1 FROM excluded e WHERE e.adsh = n.adsh AND e.ddate = n.ddate
-                              AND e.identifier = n.identifier AND e.legal_entity = n.legal_entity)
+            SELECT n.*, p.issuer_norm FROM pivot_num n
+            JOIN parsed_idents p ON p.identifier = n.identifier
+            WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        ),
+        cl AS (
+            SELECT l.adsh, l.ddate, l.sig, sum(l.fair_value) AS fv, count(*) AS n,
+                   count(DISTINCT l.issuer_norm) AS n_issuers, any_value(t.total_fv) AS total_fv
+            FROM live l JOIN filing_totals t ON t.adsh = l.adsh AND t.ddate = l.ddate
+            WHERE t.total_fv > 0
+              AND (t.assets IS NULL OR t.total_fv BETWEEN 0.3 * t.assets AND 1.2 * t.assets)
+            GROUP BY 1, 2, 3
         )
-        SELECT l.adsh, l.ddate, l.sig, sum(l.fair_value) AS fv, count(*) AS n,
-               any_value(t.total_fv) AS total_fv
-        FROM live l JOIN filing_totals t ON t.adsh = l.adsh AND t.ddate = l.ddate
-        WHERE t.total_fv > 0
-          AND (t.assets IS NULL OR t.total_fv BETWEEN 0.3 * t.assets AND 1.2 * t.assets)
-        GROUP BY 1, 2, 3
+        SELECT adsh, ddate,
+               CASE WHEN n >= 20 AND n_issuers >= 5 THEN sig ELSE '__keep__' END AS sig,
+               sum(fv) AS fv, sum(n) AS n, any_value(total_fv) AS total_fv
+        FROM cl GROUP BY 1, 2, 3
         """
     ).pl()
     drops = _choose_cluster_drops(clusters)
+    if not drops.is_empty():
+        drops = drops.filter(pl.col("sig") != "__keep__")
     con.register("cluster_drops", drops)
     con.execute(
         """
         INSERT INTO excluded
         SELECT n.adsh, n.ddate, n.identifier, n.legal_entity, 'format_cluster'
         FROM pivot_num n JOIN cluster_drops c ON c.adsh = n.adsh AND c.ddate = n.ddate AND c.sig = n.sig
+        WHERE is_live(n.adsh, n.ddate, n.identifier, n.legal_entity)
+        """
+    )
+
+    # Unfunded commitments live in their own table (rows dropped by R1 that carry a commitment).
+    con.execute(
+        """
+        CREATE OR REPLACE TABLE core.commitments AS
+        SELECT f.cik, n.ddate AS period_end, n.adsh, n.identifier, p.issuer_name, p.issuer_norm,
+               n.unfunded_commitment
+        FROM pivot_num n
+        JOIN core.filings f ON f.adsh = n.adsh
+        LEFT JOIN parsed_idents p ON p.identifier = n.identifier
+        WHERE n.cost IS NULL AND n.fair_value IS NULL AND n.unfunded_commitment IS NOT NULL
         """
     )
 
@@ -475,6 +581,7 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
                        ORDER BY (f.period = c.ddate) DESC, f.filed DESC, c.n_holdings DESC
                    ) AS rn
             FROM counts c JOIN core.filings f USING (adsh)
+            WHERE c.ddate <= current_date  -- a few filers tag a wrong (future) period date
         )
         SELECT * FROM ranked WHERE rn = 1
         """
@@ -507,8 +614,14 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
                    WHEN n.shares IS NOT NULL THEN FALSE
                    ELSE p.is_debt_text
                END AS is_debt,
-               n.fair_value, n.cost, n.principal, n.shares, n.rate, n.spread, n.floor_rate,
-               n.pik_rate, n.cash_rate, n.pct_net_assets, n.unfunded_commitment,
+               n.fair_value, n.cost, n.principal, n.shares,
+               coalesce(fix_rate(n.rate),
+                        fix_rate(n.cash_rate) + fix_rate(n.pik_rate),
+                        fix_rate(n.pik_rate)) AS rate,
+               fix_rate(n.spread) AS spread, fix_rate(n.floor_rate) AS floor_rate,
+               fix_rate(n.pik_rate) AS pik_rate, fix_rate(n.cash_rate) AS cash_rate,
+               n.pct_net_assets, n.unfunded_commitment,
+               n.rate AS rate_raw,
                coalesce(
                    try_cast(t.maturity_raw AS DATE),
                    try_strptime(t.maturity_raw, '%Y-%m')::DATE,
@@ -588,8 +701,7 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         """
     )
     for t in ("facts_num", "facts_txt", "pivot_num", "pivot_txt", "footnotes", "footnote_agg",
-              "subtotal_rows", "issuer_sum_rows", "variant_dupes", "le_dupes", "excluded",
-              "pivot_all", "filing_totals"):
+              "excluded", "pivot_all", "filing_totals"):
         con.execute(f"DROP TABLE IF EXISTS {t}")
 
     n, nf, np_ = con.execute(

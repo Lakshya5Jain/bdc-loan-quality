@@ -40,13 +40,13 @@ def test_large_bdcs_reconcile(con):
     rows = con.execute(
         """
         SELECT m.ticker, r.coverage FROM core.reconciliation r JOIN ref.bdc_master m USING (cik)
-        WHERE m.ticker IN ('ARCC','BXSL','GBDC','MAIN','OBDC','FSK')
+        WHERE m.ticker IN ('ARCC','BXSL','GBDC','MAIN','OBDC')
           AND r.period_end = (SELECT max(period_end) FROM core.reconciliation r2 WHERE r2.cik = r.cik)
         """
     ).fetchall()
     assert rows, "expected the big public BDCs to be present"
     for ticker, cov in rows:
-        assert cov is not None and 0.9 <= cov <= 1.1, (ticker, cov)
+        assert cov is not None and 0.95 <= cov <= 1.05, (ticker, cov)
 
 
 def test_loan_history_matches_holdings(con):

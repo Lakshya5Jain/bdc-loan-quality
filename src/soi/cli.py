@@ -100,6 +100,22 @@ def prices(
         typer.echo(fetch_prices(con, tickers=tickers, start=start))
 
 
+@app.command("ixfootnotes")
+def ixfootnotes(
+    all_bdcs: bool = typer.Option(False, "--all", help="All BDCs, not only public ones"),
+    since: str | None = typer.Option(None, help="Only filings with period >= this date"),
+    limit: int | None = typer.Option(None, help="Stop after N filings"),
+    keep_html: bool = typer.Option(False, help="Keep downloaded filings under data/raw/filings"),
+):
+    """Download filings and recover footnote links (non-accrual, PIK, affiliation) per holding."""
+    from soi.db import db
+    from soi.ingest.ixbrl import build_ix_footnotes
+
+    with db() as con:
+        typer.echo(build_ix_footnotes(con, public_only=not all_bdcs, since=since,
+                                      keep_html=keep_html, limit=limit, log=typer.echo))
+
+
 @app.command("export-static")
 def export_static(
     out: str = typer.Option("web/public/data", help="Output directory (wiped first)"),

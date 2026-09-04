@@ -32,7 +32,7 @@ INSTRUMENT_RULES: list[tuple[str, bool, list[str]]] = [
         r"\bstock\b", r"\bclass [a-z]\b", r"\bl\.?p\.? interest", r"\bpartnership interest",
         r"\bllc interest", r"\bordinary\b", r"\bprofits? interest", r"\bco-?invest",
     ]),
-    ("second_lien", True, [r"\bsecond[- ]lien\b", r"\b2nd[- ]lien\b", r"\bsecond_lien\b"]),
+    ("second_lien", True, [r"\bsecond[- ]lien\b", r"\b2nd[- ]lien\b", r"\bsecond_lien\b", r"\bSLD\b"]),
     ("subordinated", True, [
         r"\bsubordinat", r"\bmezz", r"\bjunior\b", r"\bunsecured\b", r"\bsenior notes?\b",
         r"\bbond", r"\bpik note", r"\bconvertible note",
@@ -40,6 +40,7 @@ INSTRUMENT_RULES: list[tuple[str, bool, list[str]]] = [
     ("first_lien", True, [
         r"\bfirst[- ]lien\b", r"\b1st[- ]lien\b", r"\bfirst_lien\b", r"\bunitranche\b",
         r"\bone[- ]stop\b", r"\bsecured debt\b", r"\bgrowth capital\b", r"\bsenior secured\b",
+        r"\bFLD\b",
         r"\bsenior debt\b", r"\bsenior loan\b", r"\bsenior term\b",
         r"\bterm loan\b", r"\brevolv", r"\bdelayed[- ]draw\b", r"\bddtl\b", r"\bloan\b",
         r"\bcredit facility\b", r"\bline of credit\b", r"\btl[ab]?\b", r"\bnotes?\b",
@@ -90,6 +91,9 @@ CATEGORY_PHRASES = [
     r"( (investments?|portfolio companies|issuers?|companies))?",
     r"controlled affiliate", r"non[- ]?affiliated?( issuers?)?", r"affiliated?( issuers?)?",
     r"issuer name", r"name of (issuer|company|portfolio company)", r"company name",
+    r"non ?affiliate", r"life science", r"technology", r"healthcare", r"medical device", r"software",
+    r"investment type", r"type", r"and", r"ncna", r"nca", r"inv\.", r"debt and equity inv\.?",
+    r"structured finance securities",
     r"portfolio company", r"issuer", r"company", r"investment",
     r"united states( of america)?", r"u\.?s\.?a?\b", r"canada", r"united kingdom", r"europe",
     r"australia", r"netherlands", r"germany", r"france", r"luxembourg", r"cayman islands",
@@ -284,7 +288,7 @@ def _cut_at_suffix(text: str) -> str | None:
 
 
 def _clean_token(tok: str) -> str:
-    return tok.strip(" |-,;").strip()
+    return _WS.sub(" ", tok).strip(" |-,;").strip()
 
 
 def _looks_like_company(tok: str) -> bool:
@@ -330,9 +334,23 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
     head = re.sub(r"\.(?=[A-Z][a-z])", ". ", head)  # "Inc.Type of Investment"
     head = _PCT_RE.sub(" ", head)
     head = _SUFFIX_COMMA_RE.sub(" ", head)
-    # drop attribute clauses (Interest Rate ..., Maturity Date ..., SOFR + ...)
+    head = _WS.sub(" ", head).strip()
+    # Pipe-delimited identifiers ("Issuer | instrument | affiliation"): the issuer is the first
+    # segment that is not a category label. Never cut inside it (co-borrower names contain words
+    # like Equity, Debt, Preferred, Fund).
+    if "|" in head:
+        for seg in head.split("|"):
+            seg = _clean_token(_CATEGORY_HEAD_RE.sub("", seg.strip(), count=1))
+            if not seg or CATEGORY_TOKEN_RE.match(seg):
+                continue
+            if RATE_DATE_RE.search(seg) and not CORP_SUFFIX_RE.search(seg):
+                continue
+            return seg
+    # strip category labels first, then drop attribute clauses (Interest Rate ..., Maturity
+    # Date ..., SOFR + ...) that follow the issuer name
+    head = strip_heads(head, industry_re)
     m = ATTRIBUTE_CLAUSE_RE.search(head)
-    if m and m.start() > 0:
+    if m and m.start() > 0 and head[: m.start()].strip():
         head = head[: m.start()]
     head = strip_heads(head, industry_re)
     tokens = [_clean_token(t) for t in _SPLIT_RE.split(head)]
@@ -346,7 +364,28 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
     for t in tokens:
         if _looks_like_company(t):
             return _strip_trailing_instrument(t)
-    return tokens[0]
+    return _strip_trailing_instrument(tokens[0])
+
+
+def instrument_text(identifier: str, issuer: str) -> str:
+    """The part of the identifier that describes the instrument (everything except the issuer).
+    For pipe-delimited identifiers this is every segment other than the issuer segment; otherwise
+    the identifier with the issuer name removed."""
+    if "|" in identifier:
+        segs = [s.strip() for s in identifier.split("|")]
+        rest = [s for s in segs if s and s != issuer.strip() and _WS.sub(" ", s) != _WS.sub(" ", issuer)]
+        # the issuer may have been cleaned (", LLC" glue, parentheticals); drop the first segment
+        # whenever it contains the issuer's first word
+        if len(rest) == len(segs) and issuer:
+            first_word = issuer.split()[0].lower() if issuer.split() else ""
+            rest = [s for i, s in enumerate(segs) if not (i == 0 and first_word and first_word in s.lower())]
+        return " | ".join(rest)
+    body = _SUFFIX_COMMA_RE.sub(" ", identifier)
+    if issuer:
+        body = body.replace(issuer, " ")
+        body = body.replace(_SUFFIX_COMMA_RE.sub(" ", issuer), " ")
+    # category labels ("Debt and Equity Inv.", "Non-controlled ...") are not instrument words
+    return strip_heads(_WS.sub(" ", body).strip(), _INDUSTRY_HEAD_RE)
 
 
 def extract_maturity_text(identifier: str) -> str | None:
@@ -452,16 +491,28 @@ def _industry_re_for(vocab: tuple[str, ...]) -> re.Pattern[str]:
     return _industry_regex(INDUSTRY_VOCAB_DEFAULT + vocab)
 
 
+_CAMEL_RE = re.compile(r"^[A-Za-z0-9]+Member$")
+
+
+def _uncamel(ident: str) -> str:
+    """'NonaffiliateDebtInvestmentsLifeScienceScientiaVascularIncTermLoanFiveMember' ->
+    'Nonaffiliate Debt Investments Life Science Scientia Vascular Inc Term Loan Five'"""
+    s = ident.removesuffix("Member")
+    s = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", s)
+    return s
+
+
 def parse_identifier(identifier: str, extra_industries: tuple[str, ...] = ()) -> ParsedIdentifier:
     ident = identifier.strip()
+    if " " not in ident and _CAMEL_RE.match(ident):
+        ident = _uncamel(ident)
     industry_re = _industry_re_for(extra_industries) if extra_industries else _INDUSTRY_HEAD_RE
     kv = dict(_KV_RE.findall(ident))
     type_text = " ".join(v.replace("_", " ") for k, v in kv.items() if k in ("TYP", "STY"))
     issuer = extract_issuer(ident, industry_re)
-    body = _SUFFIX_COMMA_RE.sub(" ", ident)
-    body = body.replace(issuer, " ") if issuer else body
+    body = instrument_text(ident, issuer)
     itype, is_debt = classify_instrument(type_text + " " + body)
-    if itype == "unknown":
+    if itype == "unknown" and "|" not in ident:
         itype, is_debt = classify_instrument(ident)
     return ParsedIdentifier(
         identifier=ident,
