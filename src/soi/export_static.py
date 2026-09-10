@@ -188,6 +188,10 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
     sec = api.sectors()
     put("insights/sectors.json", {"latest_period": _clean(sec["latest_period"]), "sectors": _rows(sec["sectors"]),
                                   "sector_history": _rows(sec["sector_history"]), "vintages": _rows(sec["vintages"])})
+    sm = api.stale_marks()
+    put("stale-marks.json", {"latest_period": _clean(sm["latest_period"]), "summary": _rows(sm["summary"]),
+                             "periods": _rows(sm["periods"]), "bdcs": _rows(sm["bdcs"]),
+                             "borrowers": _rows(sm["borrowers"])})
     bdcs = api.bdcs(public_only=False)
     put("bdcs.json", _rows(bdcs))
     log(f"top-level: {len(bdcs)} BDCs, {len(status['files'])} source files")

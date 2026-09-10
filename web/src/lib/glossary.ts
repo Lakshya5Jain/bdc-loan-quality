@@ -1,5 +1,8 @@
 /** Plain-English definitions used for column tooltips and the Glossary page. */
 export const G: Record<string, string> = {
+  mark_gap: 'On a borrower held by two or more BDCs, the highest lender\'s mark minus the lowest, for the same lien type. A wide gap means at least one lender is wrong, and one of them is usually late.',
+  stale_generosity: 'A BDC\'s cost-weighted mark on the borrowers it shares with other BDCs, minus what those other lenders mark the same loans. +0.02 means it carries shared loans two cents above the others.',
+  no_second_opinion: 'Share of a BDC\'s debt book, at cost, in borrowers no other BDC holds. Those marks cannot be checked against anyone; the higher this is, the more you are trusting one valuation committee.',
   bdc: 'Business development company: a listed company whose business is lending to mid-sized private companies. Think of it as a fund of loans that trades like a stock.',
   mark: 'Fair value divided by cost, in cents on the dollar. 1.00 means the lender expects to be repaid in full; 0.90 means it expects to lose about 10%.',
   fair_value: 'The lender\'s own estimate of what the loan is worth today. Loans do not trade, so this is an opinion, updated every quarter.',

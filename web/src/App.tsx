@@ -8,6 +8,7 @@ const GROUPS: { label: string; items: { to: string; text: string; end?: boolean 
   { label: 'Explore', items: [
     { to: '/screener', text: 'Screener' }, { to: '/bdcs', text: 'BDCs' }, { to: '/borrowers', text: 'Borrowers' },
     { to: '/vintages', text: 'Vintages' }, { to: '/scorecards', text: 'Lender track records' }, { to: '/insights', text: 'Watchlists' },
+    { to: '/stale-marks', text: 'Stale marks' },
   ] },
   { label: 'Reference', items: [{ to: '/validation', text: 'Signal tests' }, { to: '/glossary', text: 'Glossary' }] },
 ]

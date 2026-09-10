@@ -269,3 +269,34 @@ def test_nav_change_is_one_year_apart(con):
         """
     ).fetchone()[0]
     assert bad == 0
+
+
+def test_stale_marks_tables(con):
+    # every shared unit has two or more lenders and a non-negative gap between them
+    bad = con.execute(
+        "SELECT count(*) FROM signals.stale_borrowers WHERE n_bdcs < 2 OR gap < 0 OR gap <> high_mark - low_mark"
+    ).fetchone()[0]
+    assert bad == 0
+    # a BDC's shared cost never exceeds its debt cost; the two shares add to one
+    bad = con.execute(
+        """
+        SELECT count(*) FROM signals.stale_bdc
+        WHERE shared_cost > debt_cost * 1.000001
+           OR abs(shared_cost_share + no_second_opinion_share - 1) > 1e-9
+           OR (n_shared > 0 AND generosity IS NULL)
+        """
+    ).fetchone()[0]
+    assert bad == 0
+    # generosity is own mark minus the peers' mark on the same loans, so it is bounded
+    lo, hi = con.execute("SELECT min(generosity), max(generosity) FROM signals.stale_bdc").fetchone()
+    assert -1 <= lo and hi <= 1, (lo, hi)
+    # the test has both outcomes at both horizons, and the periods behind each summary row
+    outcomes = {r[0] for r in con.execute("SELECT outcome FROM signals.stale_test_summary").fetchall()}
+    assert outcomes == {"nav_chg_fwd1", "nav_chg_fwd2", "b90_chg_fwd1", "b90_chg_fwd2"}
+    n = con.execute(
+        "SELECT count(*) FROM signals.stale_test_summary s WHERE n_quarters <> "
+        "(SELECT count(*) FROM signals.stale_test_periods p WHERE p.outcome = s.outcome)"
+    ).fetchone()[0]
+    assert n == 0
+    # the existing cross-lender tables are untouched by the new step
+    assert con.execute("SELECT count(*) FROM signals.bdc_generosity").fetchone()[0] > 0

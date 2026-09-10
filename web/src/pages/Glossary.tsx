@@ -14,6 +14,7 @@ const GROUPS: { title: string; terms: [string, string][] }[] = [
     ['new_deterioration', 'Newly stressed'], ['migration', 'Mark migration'], ['generosity', 'Marks vs peers (generosity)'],
     ['quality', 'Book quality score'], ['trend', 'Trend, 1 year'], ['validated', 'Validated score'],
     ['late_marks', 'Late marks'], ['early_warning', 'Early warning'], ['went_bad', 'Went bad'], ['loss_exit', 'Loss exit rate'],
+    ['mark_gap', 'Mark gap (stale marks)'], ['stale_generosity', 'Generosity on shared borrowers'], ['no_second_opinion', 'No-second-opinion share'],
   ] },
   { title: 'The stock', terms: [['nav', 'NAV'], ['p_nav', 'Price / NAV'], ['ret', 'Total return'], ['div_yield', 'Dividend yield'], ['nav_chg', 'NAV change']] },
 ]

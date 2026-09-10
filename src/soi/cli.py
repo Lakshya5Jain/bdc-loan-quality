@@ -93,6 +93,16 @@ def build_insights_cmd():
         typer.echo(_b(con))
 
 
+@build_app.command("stale")
+def build_stale_cmd():
+    """Stale-mark detector: lender disagreement on shared borrowers, generosity, and its test."""
+    from soi.db import db
+    from soi.signals.stale_marks import build_stale_marks
+
+    with db() as con:
+        typer.echo(build_stale_marks(con, log=typer.echo))
+
+
 @build_app.command("all")
 def build_all():
     from soi.db import db
@@ -100,11 +110,13 @@ def build_all():
     from soi.signals.fundamentals import build_fundamentals
     from soi.signals.insights import build_insights
     from soi.signals.market import build_screen
+    from soi.signals.stale_marks import build_stale_marks
     from soi.transform.holdings import build_holdings
     from soi.transform.link_loans import build_loans
 
     with db() as con:
-        for step in (build_holdings, build_loans, build_signals, build_fundamentals, build_screen, build_insights):
+        for step in (build_holdings, build_loans, build_signals, build_fundamentals, build_screen, build_insights,
+                     build_stale_marks):
             typer.echo(step(con))
 
 

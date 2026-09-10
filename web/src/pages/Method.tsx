@@ -59,6 +59,16 @@ long book  = healthiest fifth      short book = sickest fifth      equal dollars
         <p className="note">The results are on the <Link to="/results">results page</Link>; the loan-level warning-score tests are under <Link to="/validation">signal tests</Link>.</p>
       </Section>
 
+      <Section title="5. Stale marks: the same loan, valued by different lenders">
+        <div className="prose"><p>Added after the strategy above was fixed; nothing here feeds the health score. When two or more BDCs hold the same borrower, each values its own slice independently, which gives a free second opinion on every mark. The unit of comparison is one borrower, one lien type, one quarter, so a first lien is never compared with a second lien on the same company. Positions marked outside 0 to 1.25 are dropped as unit errors in the filing. Results are on the <Link to="/stale-marks">stale marks page</Link>.</p></div>
+        <dl className="defs">
+          <dt>mark gap</dt><dd>the highest lender's mark minus the lowest on the same borrower and lien type. The page lists the current quarter sorted by gap, with every lender's mark.</dd>
+          <dt>generosity</dt><dd>a BDC's cost-weighted mark on the positions it shares with other BDCs, minus what those other lenders mark the same positions, weighted the same way. Positive means it carries shared loans above the crowd. Needs at least five shared positions to mean anything.</dd>
+          <dt>no-second-opinion share</dt><dd>the share of a BDC's debt book, at cost, in borrowers no other BDC holds. The higher it is, the less of the book can be checked against anyone.</dd>
+          <dt>the test</dt><dd>each calendar quarter, liquid public BDCs with five or more shared positions are sorted on generosity. The most generous fifth is compared with the least generous fifth on the change in NAV per share and the change in the share of loans below 90 over the next one and two quarters, found by date. Reported per quarter with the sign, the t-stat across quarters and the hit rate, plus the rank correlation across all names. Each group's starting share below 90 is shown beside the outcome because the generous group tends to start with more stress, which confounds the reading.</dd>
+        </dl>
+      </Section>
+
     </div>
   )
 }

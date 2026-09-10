@@ -309,6 +309,49 @@ def strategy():
     }
 
 
+@app.get("/api/stale-marks")
+def stale_marks():
+    """Stale-mark detector: lender disagreement on shared borrowers, per-BDC generosity and
+    no-second-opinion share, and the forward test of generosity."""
+    latest = db.one("SELECT max(period_end) AS p FROM signals.stale_bdc s JOIN ref.bdc_master m USING (cik) WHERE m.is_public")["p"]
+    return {
+        "latest_period": latest,
+        "summary": db.rows("SELECT * FROM signals.stale_test_summary"),
+        "periods": db.rows("SELECT * FROM signals.stale_test_periods ORDER BY qtr, outcome"),
+        "bdcs": db.rows(
+            """
+            WITH last AS (
+                SELECT s.*, row_number() OVER (PARTITION BY s.cik ORDER BY s.period_end DESC) AS rn
+                FROM signals.stale_bdc s
+            ),
+            g4 AS (
+                SELECT cik, avg(generosity) AS generosity_4q
+                FROM (SELECT cik, generosity, row_number() OVER (PARTITION BY cik ORDER BY period_end DESC) AS rn
+                      FROM signals.stale_bdc WHERE generosity IS NOT NULL)
+                WHERE rn <= 4 GROUP BY 1
+            )
+            SELECT l.cik, m.ticker, m.name, m.is_public, l.period_end, l.debt_cost, l.n_shared, l.shared_cost_share,
+                   l.no_second_opinion_share, l.own_mark_shared, l.peer_mark_shared, l.generosity, g4.generosity_4q,
+                   l.n_above_5, l.n_below_5
+            FROM last l JOIN ref.bdc_master m USING (cik) LEFT JOIN g4 USING (cik)
+            WHERE l.rn = 1 AND l.period_end >= ? - INTERVAL 200 DAY
+            ORDER BY l.generosity DESC NULLS LAST
+            """,
+            [latest],
+        ),
+        "borrowers": db.rows(
+            """
+            SELECT borrower_key, period_end, instrument_type, issuer_name, industry, n_bdcs, n_public, total_cost,
+                   wavg_mark, low_mark, high_mark, gap, low_cik, low_lender, high_cik, high_lender,
+                   any_nonaccrual, n_nonaccrual, lenders
+            FROM signals.stale_borrowers WHERE period_end = ?
+            ORDER BY gap DESC, total_cost DESC LIMIT 600
+            """,
+            [latest],
+        ),
+    }
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
