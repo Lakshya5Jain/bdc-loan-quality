@@ -69,6 +69,18 @@ long book  = healthiest fifth      short book = sickest fifth      equal dollars
         </dl>
       </Section>
 
+      <Section title="6. Strategy lab: costs, size, factor check, extra inputs">
+        <div className="prose"><p>Variants of the default strategy, run on the same filing-day universe with the same method, shown on the <Link to="/results">results page</Link>. None of them changes the default.</p></div>
+        <dl className="defs">
+          <dt>costs</dt><dd>40 basis points per round trip on each leg per holding period, plus stock borrow on the short book at 15% a year for names trading under $1m a day, 5% for $1m to $5m and 1% above $5m, pro-rated to the days held. Rough tiers, not quotes.</dd>
+          <dt>liquidity floor</dt><dd>the book may only hold names whose median daily dollar volume over the prior 180 days clears the floor. Ranks are still computed against every liquid name, so the score means the same thing at every floor.</dd>
+          <dt>residual score</dt><dd>each quarter the health score is regressed on price / NAV across the names and the residual is ranked instead. If the residual still works, the score carries information the price does not.</dd>
+          <dt>conviction weighting</dt><dd>dollars in each side in proportion to how far the score sits from the middle name, instead of equal.</dd>
+          <dt>fifth inputs</dt><dd>generosity on shared borrowers (section 5), and two roll-ups of the loan warning score: the cost-weighted average score and the share of cost scored 30 or more. The loan score is refitted every quarter using only loan-quarters whose one-year outcome was already known on the scoring date, so nothing from the future leaks in. Each is tested alone and as a fifth peer-rank averaged into the score.</dd>
+          <dt>turnover</dt><dd>share of each side's book replaced from one quarter to the next, averaged over the two sides.</dd>
+        </dl>
+      </Section>
+
     </div>
   )
 }

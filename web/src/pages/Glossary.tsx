@@ -2,7 +2,8 @@ import { PageHeader, Section } from '../components/Page'
 import { G } from '../lib/glossary'
 
 const GROUPS: { title: string; terms: [string, string][] }[] = [
-  { title: 'The strategy', terms: [['health', 'Health score'], ['strategy_side', 'Long, short, or no position'], ['recon', 'Data check (reconciliation)']] },
+  { title: 'The strategy', terms: [['health', 'Health score'], ['strategy_side', 'Long, short, or no position'], ['recon', 'Data check (reconciliation)'],
+    ['liquidity_floor', 'Liquidity floor'], ['borrow_cost', 'Borrow cost'], ['turnover', 'Turnover'], ['residual_score', 'Residual score'], ['conviction', 'Conviction weighting'], ['risk_wf', 'Walk-forward loan score']] },
   { title: 'A loan', terms: [
     ['bdc', 'BDC'], ['fair_value', 'Fair value'], ['cost', 'Cost'], ['principal', 'Principal'], ['mark', 'Mark'],
     ['first_lien', 'First lien, second lien, subordinated, equity'], ['nonaccrual', 'Non-accrual'], ['pik', 'PIK'],

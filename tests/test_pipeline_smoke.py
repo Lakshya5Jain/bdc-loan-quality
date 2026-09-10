@@ -300,3 +300,50 @@ def test_stale_marks_tables(con):
     assert n == 0
     # the existing cross-lender tables are untouched by the new step
     assert con.execute("SELECT count(*) FROM signals.bdc_generosity").fetchone()[0] > 0
+
+
+def test_strategy_lab_tables(con):
+    # the baseline variant must reproduce the default strategy quarter for quarter
+    bad = con.execute(
+        """
+        SELECT count(*) FROM signals.lab_variant_periods v
+        JOIN signals.strategy_periods p ON p.period_end = v.qtr
+        WHERE v.variant = 'default_4'
+          AND (abs(v.spread_gross - p.spread) > 1e-9 OR v.n_names <> p.n_names OR v.longs <> p.longs OR v.shorts <> p.shorts)
+        """
+    ).fetchone()[0]
+    assert bad == 0
+    n_base, n_def = con.execute(
+        "SELECT (SELECT count(*) FROM signals.lab_variant_periods WHERE variant = 'default_4'), "
+        "(SELECT count(*) FROM signals.strategy_periods)"
+    ).fetchone()
+    assert n_base == n_def
+    # a higher floor never holds a name below it; net is gross less both costs
+    bad = con.execute(
+        """
+        SELECT count(*) FROM signals.lab_variant_periods
+        WHERE abs(spread_net - (spread_gross - trading_cost - borrow_cost)) > 1e-9
+           OR borrow_cost < 0 OR turnover < 0 OR turnover > 1
+        """
+    ).fetchone()[0]
+    assert bad == 0
+    floors = dict(con.execute("SELECT variant, floor FROM signals.lab_variant_summary").fetchall())
+    assert floors["floor_5m"] == 5_000_000 and floors["default_4"] == 100_000
+    # walk-forward loan score: every fit uses only outcomes known before the scoring quarter
+    bad = con.execute(
+        """
+        SELECT count(*) FROM signals.lab_risk_wf r
+        WHERE fit_qtr < period_end - INTERVAL 100 DAY OR wavg_risk_wf < 0 OR wavg_risk_wf > 100
+           OR pct_risk_hi_wf < 0 OR pct_risk_hi_wf > 1
+        """
+    ).fetchone()[0]
+    assert bad == 0
+    assert con.execute("SELECT count(DISTINCT fit_qtr) FROM signals.lab_risk_fits").fetchone()[0] >= 8
+    # live books: the large-cap book is a subset of the live ranking at the $5m floor
+    bad = con.execute(
+        "SELECT count(*) FROM signals.lab_book_largecap WHERE dollar_vol < 5000000 "
+        "OR cik NOT IN (SELECT cik FROM signals.strategy_latest)"
+    ).fetchone()[0]
+    assert bad == 0
+    # existing strategy tables untouched
+    assert con.execute("SELECT quarters_won FROM signals.strategy_summary").fetchone()[0] >= 1

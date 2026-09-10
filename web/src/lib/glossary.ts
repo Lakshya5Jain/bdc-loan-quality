@@ -1,5 +1,11 @@
 /** Plain-English definitions used for column tooltips and the Glossary page. */
 export const G: Record<string, string> = {
+  turnover: 'Share of each side\'s book replaced from one quarter to the next. 0.25 means a quarter of the names changed. Higher turnover means more trading cost.',
+  borrow_cost: 'What it costs to borrow shares to short, per holding period. Charged at 15% a year for names trading under $1m a day, 5% for $1m to $5m, 1% above $5m. Small BDCs are expensive to short.',
+  liquidity_floor: 'The minimum median daily dollar volume a name must trade for the strategy to hold it. Ranks are computed against every liquid BDC; the floor only changes which names can be in the book.',
+  residual_score: 'The health score with the part explained by price / NAV removed, by regressing one on the other across BDCs each quarter. Tests whether the score carries information the market price does not already reflect.',
+  conviction: 'Position sizes in proportion to how far a name\'s score sits from the middle of the pack, instead of equal dollars. The strongest calls get the most money.',
+  risk_wf: 'The loan warning score rolled up per BDC, refitted every quarter on loan-quarters whose one-year outcome was already known on the scoring date, so nothing from the future leaks in. Reported as the cost-weighted average score and the share of cost scored 30 or more.',
   mark_gap: 'On a borrower held by two or more BDCs, the highest lender\'s mark minus the lowest, for the same lien type. A wide gap means at least one lender is wrong, and one of them is usually late.',
   stale_generosity: 'A BDC\'s cost-weighted mark on the borrowers it shares with other BDCs, minus what those other lenders mark the same loans. +0.02 means it carries shared loans two cents above the others.',
   no_second_opinion: 'Share of a BDC\'s debt book, at cost, in borrowers no other BDC holds. Those marks cannot be checked against anyone; the higher this is, the more you are trusting one valuation committee.',

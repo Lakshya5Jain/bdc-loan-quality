@@ -121,6 +121,7 @@ async function staticGet<T>(url: string): Promise<T> {
   if (a === 'screen') return load<T>('/screen.json')
   if (a === 'strategy') return load<T>('/strategy.json')
   if (a === 'stale-marks') return load<T>('/stale-marks.json')
+  if (a === 'lab') return load<T>('/lab.json')
   if (a === 'health') return { ok: true } as T
   if (a === 'insights' && b) return load<T>(`/insights/${b}.json`)
 

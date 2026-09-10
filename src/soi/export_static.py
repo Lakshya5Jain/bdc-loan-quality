@@ -192,6 +192,8 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
     put("stale-marks.json", {"latest_period": _clean(sm["latest_period"]), "summary": _rows(sm["summary"]),
                              "periods": _rows(sm["periods"]), "bdcs": _rows(sm["bdcs"]),
                              "borrowers": _rows(sm["borrowers"])})
+    lb = api.lab()
+    put("lab.json", {k: _rows(v) for k, v in lb.items()})
     bdcs = api.bdcs(public_only=False)
     put("bdcs.json", _rows(bdcs))
     log(f"top-level: {len(bdcs)} BDCs, {len(status['files'])} source files")

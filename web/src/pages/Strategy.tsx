@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import DataTable, { Col } from '../components/DataTable'
@@ -39,11 +40,42 @@ const qlabel = (d: string) => {
   return `Q${Math.ceil(Number(m) / 3)} ${y.slice(2)}`
 }
 
+type LabVariant = { variant: string; family: string; floor: number; n_quarters: number; quarters_won: number; mean_gross: number; gross_tstat: number | null; worst_gross: number; mean_net: number; net_tstat: number | null; worst_net: number; quarters_won_net: number; mean_borrow: number; mean_turnover: number | null; mean_names: number; mean_side: number }
+type LabPeriod = { variant: string; qtr: string; n_names: number; n_side: number; long_excess: number; short_excess: number; spread_gross: number; trading_cost: number; borrow_cost: number; spread_net: number; turnover: number | null; universe_ret: number; longs: string; shorts: string }
+type LabSignal = { signal: string; expected_direction: string; n_periods: number; mean_ic: number; ic_tstat: number | null; ic_hit_rate: number; mean_spread_dir: number | null; spread_tstat: number | null }
+type LabBook = BookRow & { dollar_vol?: number; rank_lc?: number; n_lc?: number; side_lc?: 'long' | 'short' | null; generosity?: number | null; generosity_rank?: number | null; health5?: number; rank5?: number; n5?: number; side5?: 'long' | 'short' | null }
+type Lab = { variants: LabVariant[]; periods: LabPeriod[]; signals: LabSignal[]; book_largecap: LabBook[]; book_5: LabBook[] }
+
+const VARIANT_LABEL: Record<string, string> = {
+  default_4: 'Default (4 inputs, $100k floor, equal weights)',
+  floor_1m: 'Same, only names trading $1m+ a day',
+  floor_2m: 'Same, only names trading $2m+ a day',
+  floor_5m: 'Same, only names trading $5m+ a day',
+  residual_pnav: 'Score with the price / NAV part removed',
+  conviction: 'Conviction-weighted positions',
+  plus_generosity: 'Five inputs: + generosity on shared borrowers',
+  plus_risk_wavg: 'Five inputs: + average loan warning score',
+  plus_risk_hi: 'Five inputs: + share of loans scored 30+',
+  combined_1m: 'Combined: + generosity, $1m floor, conviction weights',
+}
+const LAB_SIGNAL_LABEL: Record<string, string> = {
+  generosity: 'Generosity on shared borrowers',
+  wavg_risk_wf: 'Average loan warning score (walk-forward)',
+  pct_risk_hi_wf: 'Share of loans scored 30+ (walk-forward)',
+}
+
 export function Results() {
   const { data, error, loading } = useApi<Strategy>('/api/strategy')
+  const lab = useApi<Lab>('/api/lab')
+  const [labVariant, setLabVariant] = useState('default_4')
   if (error) return <div className="err">{error}</div>
   if (loading || !data) return <div className="loading">Loading strategy…</div>
   const { summary: s, periods, signals } = data
+  const labPeriods = (lab.data?.periods ?? []).filter((p) => p.variant === labVariant)
+  const v2m = lab.data?.variants.find((v) => v.variant === 'floor_2m')
+  const vres = lab.data?.variants.find((v) => v.variant === 'residual_pnav')
+  const vgen = lab.data?.variants.find((v) => v.variant === 'plus_generosity')
+  const vdef = lab.data?.variants.find((v) => v.variant === 'default_4')
 
   const periodCols: Col<Period>[] = [
     { header: 'Quarter reported', accessorKey: 'period_end', left: true, cell: (c) => qlabel(c.getValue<string>()) },
@@ -117,6 +149,73 @@ export function Results() {
         </div>
       </Section>
 
+      {lab.data && vdef && (
+        <Section title="Variants: after costs, at size, and with more inputs" meta={`${lab.data.variants.length} variants · same universe and method`}>
+          <Explain>
+            <p><b>What this adds.</b> The default strategy above is before costs and holds anything trading over $100,000 a day. This table reruns it with realistic costs (40 basis points per round trip on each leg, plus stock borrow on the short book at 15% a year for names under $1m a day, 5% up to $5m, 1% above), at higher liquidity floors, with the price / NAV part of the score stripped out, with conviction-weighted positions, and with a fifth input added. Ranks are always computed against every liquid name; a floor only changes which names the book may hold.</p>
+            <p><b>What it says.</b>
+              {' '}After costs the default keeps {signedPct(vdef.mean_net)} a quarter of its {signedPct(vdef.mean_gross)}: borrow on tiny shorts eats {pct(vdef.mean_borrow)} a quarter.
+              {v2m && <> At a $2m floor the book is cheaper to run and made {signedPct(v2m.mean_net)} net, {v2m.quarters_won} of {v2m.n_quarters} quarters positive before costs.</>}
+              {vres && <> With price / NAV removed the score still worked in {vres.quarters_won} of {vres.n_quarters} quarters at {signedPct(vres.mean_gross)} gross (t-stat {num(vres.gross_tstat, 1)}), so most of the edge is information the price does not carry, with some value tilt.</>}
+              {vgen && <> Adding generosity as a fifth input {vgen.mean_gross >= vdef.mean_gross ? 'raised' : 'lowered'} the average to {signedPct(vgen.mean_gross)} and moved the worst quarter to {signedPct(vgen.worst_gross)}.</>}
+              {' '}The loan warning score as a fifth input did not help. None of these variants changes the default strategy; they are shown so the trade-offs are visible.</p>
+          </Explain>
+          <div className="panel">
+            <DataTable data={lab.data.variants} columns={[
+              { header: 'Variant', accessorKey: 'variant', left: true, wrap: true, cell: (c) => VARIANT_LABEL[c.getValue<string>()] ?? c.getValue<string>() },
+              { header: 'Names / quarter', accessorKey: 'mean_names', tip: 'Average tradable names per quarter under this variant.', cell: (c) => num(c.getValue<number>(), 0) },
+              { header: 'Quarters won', id: 'won', accessorFn: (r: LabVariant) => r.quarters_won / r.n_quarters, cell: (c) => `${c.row.original.quarters_won} of ${c.row.original.n_quarters}` },
+              { header: 'Gross / quarter', accessorKey: 'mean_gross', tip: 'Long minus short, before costs, average per quarter.', cell: (c) => <b className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</b> },
+              { header: 't-stat', accessorKey: 'gross_tstat', cell: (c) => num(c.getValue<number | null>(), 1) },
+              { header: 'Worst gross', accessorKey: 'worst_gross', cell: (c) => <span className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</span> },
+              { header: 'Borrow / quarter', accessorKey: 'mean_borrow', tip: G.borrow_cost, cell: (c) => pct(c.getValue<number>(), 2) },
+              { header: 'Net / quarter', accessorKey: 'mean_net', tip: 'After 80 bp of trading cost per quarter and the borrow cost.', cell: (c) => <b className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</b> },
+              { header: 'Worst net', accessorKey: 'worst_net', cell: (c) => <span className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</span> },
+              { header: 'Quarters up, net', id: 'won_net', accessorFn: (r: LabVariant) => r.quarters_won_net / r.n_quarters, cell: (c) => `${c.row.original.quarters_won_net} of ${c.row.original.n_quarters}` },
+              { header: 'Turnover', accessorKey: 'mean_turnover', tip: G.turnover, cell: (c) => num(c.getValue<number | null>(), 2) },
+            ] as Col<LabVariant>[]} />
+          </div>
+          <div className="controls" style={{ marginTop: 12 }}>
+            <label>quarter by quarter for{' '}
+              <select value={labVariant} onChange={(e) => setLabVariant(e.target.value)}>
+                {lab.data.variants.map((v) => <option key={v.variant} value={v.variant}>{VARIANT_LABEL[v.variant] ?? v.variant}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="panel">
+            <DataTable data={labPeriods} columns={[
+              { header: 'Quarter', accessorKey: 'qtr', left: true, cell: (c) => qlabel(c.getValue<string>()) },
+              { header: 'Names', accessorKey: 'n_names' },
+              { header: 'Per side', accessorKey: 'n_side' },
+              { header: 'Long book', accessorKey: 'long_excess', cell: (c) => <span className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</span> },
+              { header: 'Short book', accessorKey: 'short_excess', cell: (c) => <span className={c.getValue<number>() <= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</span> },
+              { header: 'Gross', accessorKey: 'spread_gross', cell: (c) => <b className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</b> },
+              { header: 'Borrow', accessorKey: 'borrow_cost', cell: (c) => pct(c.getValue<number>(), 2) },
+              { header: 'Net', accessorKey: 'spread_net', cell: (c) => <b className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</b> },
+              { header: 'Turnover', accessorKey: 'turnover', tip: G.turnover, cell: (c) => num(c.getValue<number | null>(), 2) },
+              { header: 'Longs', accessorKey: 'longs', left: true, wrap: true, cell: (c) => <span className="small muted">{c.getValue<string>().replace(/,/g, ', ')}</span> },
+              { header: 'Shorts', accessorKey: 'shorts', left: true, wrap: true, cell: (c) => <span className="small muted">{c.getValue<string>().replace(/,/g, ', ')}</span> },
+            ] as Col<LabPeriod>[]} initialSort={[{ id: 'qtr', desc: true }]} />
+          </div>
+        </Section>
+      )}
+
+      {lab.data && lab.data.signals.length > 0 && (
+        <Section title="Extra inputs on their own">
+          <p className="sub">Tested exactly like the signals above. Generosity comes from the <Link to="/stale-marks">stale marks</Link> work; the two loan-score roll-ups are refitted every quarter on outcomes already known by then ({G.risk_wf.toLowerCase()}).</p>
+          <div className="panel">
+            <DataTable data={lab.data.signals} columns={[
+              { header: 'Signal', accessorKey: 'signal', left: true, cell: (c) => LAB_SIGNAL_LABEL[c.getValue<string>()] ?? c.getValue<string>() },
+              { header: 'Quarters', accessorKey: 'n_periods' },
+              { header: 'Quarters ranked correctly', accessorKey: 'ic_hit_rate', cell: (c) => pct(c.getValue<number>(), 0) },
+              { header: 'Rank correlation', accessorKey: 'mean_ic', cell: (c) => num(c.getValue<number>(), 3) },
+              { header: 't-stat', accessorKey: 'ic_tstat', cell: (c) => num(c.getValue<number | null>(), 1) },
+              { header: 'Top minus bottom fifth', accessorKey: 'mean_spread_dir', cell: (c) => { const v = c.getValue<number | null>(); return <span className={(v ?? 0) >= 0 ? 'pos' : 'neg'}>{signedPct(v)}</span> } },
+            ] as Col<LabSignal>[]} />
+          </div>
+        </Section>
+      )}
+
       <Section title="What to keep in mind">
       <Explain kind="warn">
         <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -135,9 +234,14 @@ export function Results() {
 
 export function Book() {
   const { data, error, loading } = useApi<Strategy>('/api/strategy')
+  const lab = useApi<Lab>('/api/lab')
+  const [view, setView] = useState<'default' | 'largecap' | 'five'>('default')
   if (error) return <div className="err">{error}</div>
   if (loading || !data) return <div className="loading">Loading strategy…</div>
-  const { summary: s, book } = data
+  const { summary: s } = data
+  const book: BookRow[] = view === 'default' || !lab.data ? data.book
+    : view === 'largecap' ? lab.data.book_largecap.map((b) => ({ ...b, side: b.side_lc ?? null, rank: b.rank_lc ?? b.rank, n: b.n_lc ?? b.n }))
+    : lab.data.book_5.map((b) => ({ ...b, side: b.side5 ?? null, rank: b.rank5 ?? b.rank, n: b.n5 ?? b.n, health: b.health5 ?? b.health }))
   const longs = book.filter((b) => b.side === 'long')
   const shorts = book.filter((b) => b.side === 'short').slice().reverse()
   const middle = book.filter((b) => !b.side)
@@ -160,6 +264,16 @@ export function Book() {
         <p><b>How to read it.</b> The health score averages four peer-ranks from the BDC's own loan schedule: share of loans below 90 and below 95 cents on the dollar, the average mark, and the year's NAV change. 1.0 would be the healthiest book on every measure. Names appear only if they trade at least $100,000 a day; a rule that cannot be traded at the quoted price is not a rule. Click a ticker to see the loans behind its score.</p>
       </Explain>
       <Section title="Positions" meta={`${longs.length} long · ${shorts.length} short · ${middle.length} no position`}>
+      <div className="controls">
+        <label>book{' '}
+          <select value={view} onChange={(e) => setView(e.target.value as 'default' | 'largecap' | 'five')}>
+            <option value="default">Default: every name over $100k a day</option>
+            <option value="largecap">Large-cap: only names over $5m a day</option>
+            <option value="five">Five inputs: default plus generosity on shared borrowers</option>
+          </select>
+        </label>
+        {view !== 'default' && <span className="muted small">{view === 'largecap' ? 'Same health score; the book is the top and bottom fifth of the names that clear the $5m floor. Cheaper to short, fewer names, weaker record (see results).' : 'Adds a fifth peer-rank: how the BDC marks shared borrowers against other lenders (lower is healthier). Tested on the results page; not the default.'}</span>}
+      </div>
       <div className="row">
         <div className="panel">
           <h2><span className="tag long">long</span> Healthiest {longs.length}</h2>

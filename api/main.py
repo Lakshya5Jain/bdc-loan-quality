@@ -352,6 +352,27 @@ def stale_marks():
     }
 
 
+LAB_BOOK_COLS = """
+    cik, ticker, name, side, rank, n, health, period_end, filed, entry_date, close_entry, p_nav,
+    pct_debt_below_90, pct_debt_below_95, debt_mark, nav_chg_4q,
+    pct_debt_below_90_rank, pct_debt_below_95_rank, debt_mark_rank, nav_chg_4q_rank
+"""
+
+
+@app.get("/api/lab")
+def lab():
+    """Strategy lab: liquidity floors with borrow costs, the price/NAV residual, conviction
+    weights, extra inputs, turnover; plus today's large-cap and five-input books."""
+    return {
+        "variants": db.rows("SELECT * FROM signals.lab_variant_summary ORDER BY rowid"),
+        "periods": db.rows("SELECT * FROM signals.lab_variant_periods ORDER BY variant, qtr"),
+        "signals": db.rows("SELECT * FROM signals.lab_signal_summary ORDER BY ic_tstat DESC"),
+        "book_largecap": db.rows(f"SELECT {LAB_BOOK_COLS}, dollar_vol, rank_lc, n_lc, side_lc FROM signals.lab_book_largecap ORDER BY rank_lc"),
+        "book_5": db.rows(f"SELECT {LAB_BOOK_COLS}, generosity, generosity_rank, health5, rank5, n5, side5 FROM signals.lab_book_5 ORDER BY rank5"),
+        "risk_fits": db.rows("SELECT * FROM signals.lab_risk_fits WHERE fit_qtr = (SELECT max(fit_qtr) FROM signals.lab_risk_fits) ORDER BY weight DESC"),
+    }
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}

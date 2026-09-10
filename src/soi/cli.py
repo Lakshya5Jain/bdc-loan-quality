@@ -103,6 +103,16 @@ def build_stale_cmd():
         typer.echo(build_stale_marks(con, log=typer.echo))
 
 
+@build_app.command("lab")
+def build_lab_cmd():
+    """Strategy lab: liquidity floors and borrow costs, residual score, conviction weights, extra inputs."""
+    from soi.db import db
+    from soi.signals.strategy_lab import build_strategy_lab
+
+    with db() as con:
+        typer.echo(build_strategy_lab(con, log=typer.echo))
+
+
 @build_app.command("all")
 def build_all():
     from soi.db import db
