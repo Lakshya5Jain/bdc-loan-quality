@@ -113,6 +113,16 @@ def build_lab_cmd():
         typer.echo(build_strategy_lab(con, log=typer.echo))
 
 
+@build_app.command("forced")
+def build_forced_cmd():
+    """Forced-seller flags: asset coverage vs the 150% minimum, and the exit-at-a-loss test."""
+    from soi.db import db
+    from soi.signals.forced_sellers import build_forced_sellers
+
+    with db() as con:
+        typer.echo(build_forced_sellers(con, log=typer.echo))
+
+
 @build_app.command("all")
 def build_all():
     from soi.db import db

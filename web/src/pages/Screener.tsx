@@ -20,6 +20,8 @@ export type ScreenRow = {
   nav_period: string | null; d4_debt_mark: number | null
   short_score: number | null; long_score: number | null; n_debt: number; debt_cost: number | null
   coverage: number | null; data_ok: boolean; n_nonaccrual: number
+  asset_coverage?: number | null; coverage_source?: string | null; coverage_distance_pts?: number | null
+  near_limit?: boolean | null; b90_up_2q?: boolean | null; forced_seller_flag?: boolean | null
 }
 type BookRow = { cik: number; side: 'long' | 'short' | null; rank: number; n: number; health: number }
 type Dot = ScreenRow & { health: number; side: string }
@@ -51,6 +53,8 @@ export default function Screener() {
     { header: 'Book quality', accessorKey: 'quality_score', tip: G.quality, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
     { header: 'Trend (1 yr)', accessorKey: 'quality_trend_4q', tip: G.trend, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
     { header: 'Price / NAV', accessorKey: 'p_nav', tip: G.p_nav, cell: (c) => num(c.getValue<number>()) },
+    { header: 'Asset coverage', id: 'asset_coverage', accessorFn: (r) => r.asset_coverage ?? 99, tip: G.asset_coverage + ' Tagged by the filer where available, otherwise computed.', cell: (c) => { const v = c.row.original.asset_coverage; return v == null ? '' : <span className={v <= 1.7 ? 'neg' : ''}>{pct(v, 0)}</span> } },
+    { header: 'Forced seller?', id: 'forced', accessorFn: (r) => (r.forced_seller_flag ? 2 : r.near_limit ? 1 : 0), tip: G.forced_seller, cell: (c) => { const r = c.row.original; return r.forced_seller_flag ? <span className="tag short">flag</span> : r.near_limit ? <span className="muted small">near limit</span> : '' } },
     { header: 'Return 3m', accessorKey: 'ret_3m', tip: G.ret, cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
     { header: 'Return 12m', accessorKey: 'ret_12m', tip: G.ret, cell: (c) => <span className={cls(c.getValue<number>())}>{signedPct(c.getValue<number>())}</span> },
     { header: 'Dividend yield', accessorKey: 'div_yield', tip: G.div_yield, cell: (c) => pct(c.getValue<number>()) },

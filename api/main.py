@@ -45,9 +45,24 @@ def status():
     return {"files": files, "counts": counts, "reconciliation": recon, "excluded": excluded}
 
 
+FORCED_COLS = """
+    fs.coverage AS asset_coverage, fs.coverage_source, fs.distance_pts AS coverage_distance_pts,
+    fs.near_limit, fs.b90_up_2q, fs.flagged AS forced_seller_flag
+"""
+FORCED_JOIN = """
+    LEFT JOIN (
+        SELECT * FROM signals.forced_seller
+        QUALIFY row_number() OVER (PARTITION BY cik ORDER BY period_end DESC) = 1
+    ) fs ON fs.cik = {alias}.cik
+"""
+
+
 @app.get("/api/screen")
 def screen():
-    return db.rows(f"SELECT {SCREEN_COLS} FROM market.screen ORDER BY short_score DESC")
+    return db.rows(
+        f"SELECT sc.*, {FORCED_COLS} FROM (SELECT {SCREEN_COLS} FROM market.screen) sc "
+        f"{FORCED_JOIN.format(alias='sc')} ORDER BY sc.short_score DESC"
+    )
 
 
 @app.get("/api/bdcs")
@@ -95,8 +110,17 @@ def bdc_detail(cik: int):
     )
     screen_row = db.one(f"SELECT {SCREEN_COLS} FROM market.screen WHERE cik = ?", [cik])
     scorecard = db.one("SELECT * FROM signals.lender_scorecard WHERE cik = ?", [cik])
+    forced = db.rows(
+        """
+        SELECT period_end, coverage, coverage_source, distance_pts, near_limit, b90_up_2q, flagged,
+               pct_debt_below_90, exit_loss_fwd2, fwd2_observed
+        FROM signals.forced_seller WHERE cik = ? ORDER BY period_end
+        """,
+        [cik],
+    )
+    forced_test = db.rows("SELECT * FROM signals.forced_seller_test")
     return {"bdc": bdc, "quarters": quarters, "migration": migration, "generosity": generosity,
-            "screen": screen_row, "scorecard": scorecard}
+            "screen": screen_row, "scorecard": scorecard, "forced_seller": forced, "forced_seller_test": forced_test}
 
 
 @app.get("/api/bdcs/{cik}/loans")

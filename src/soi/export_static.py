@@ -209,6 +209,8 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
             "generosity": _rows(d["generosity"]),
             "screen": _row(d["screen"]) if d["screen"] else None,
             "scorecard": _row(d["scorecard"]) if d.get("scorecard") else None,
+            "forced_seller": _rows(d.get("forced_seller", [])),
+            "forced_seller_test": _rows(d.get("forced_seller_test", [])),
         })
     log(f"bdc detail: {len(ciks)} files")
 

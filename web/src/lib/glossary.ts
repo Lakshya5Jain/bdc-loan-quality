@@ -1,5 +1,8 @@
 /** Plain-English definitions used for column tooltips and the Glossary page. */
 export const G: Record<string, string> = {
+  asset_coverage: 'Total assets minus non-debt liabilities, divided by debt: (net assets + debt) / debt. BDCs must keep it above 150%. Below that they cannot borrow more or pay dividends, so they must raise equity or sell loans.',
+  coverage_distance: 'How many percentage points of asset coverage the BDC has above the 150% minimum. 20 points means coverage of 170%.',
+  forced_seller: 'Flag: within 20 points of the 150% asset-coverage minimum AND the share of loans below 90 rose in each of the last two quarters. A BDC in that spot has little room to absorb more markdowns and may have to sell loans to stay compliant.',
   turnover: 'Share of each side\'s book replaced from one quarter to the next. 0.25 means a quarter of the names changed. Higher turnover means more trading cost.',
   borrow_cost: 'What it costs to borrow shares to short, per holding period. Charged at 15% a year for names trading under $1m a day, 5% for $1m to $5m, 1% above $5m. Small BDCs are expensive to short.',
   liquidity_floor: 'The minimum median daily dollar volume a name must trade for the strategy to hold it. Ranks are computed against every liquid BDC; the floor only changes which names can be in the book.',

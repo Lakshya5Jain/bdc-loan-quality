@@ -81,6 +81,16 @@ long book  = healthiest fifth      short book = sickest fifth      equal dollars
         </dl>
       </Section>
 
+      <Section title="7. Forced sellers: distance to the leverage limit">
+        <div className="prose"><p>A BDC must keep asset coverage, (net assets + debt) / debt, above 150%. Below it, no new borrowing and no dividends, so the BDC has to raise equity or sell loans, and a seller that has to sell takes the price it is offered. Shown as a column on the <Link to="/screener">screener</Link> and a section on each BDC page.</p></div>
+        <dl className="defs">
+          <dt>asset coverage</dt><dd>the filer's own tagged ratio where it tags one (about a third of quarters; a tagged value of exactly 1.50 or 2.00 is the legal minimum being tagged and is ignored), otherwise computed from the balance-sheet tags as (net assets + debt) / debt. Values outside 1.2 to 6 are dropped.</dd>
+          <dt>distance</dt><dd>(coverage - 1.50) x 100, in percentage points.</dd>
+          <dt>flag</dt><dd>distance of 20 points or less AND the share of debt below 90 rose in each of the last two quarters.</dd>
+          <dt>the test</dt><dd>flagged versus unflagged BDC-quarters on the cost of loans that left the book with a last mark below 0.90 over the next two quarters, as a share of the debt book. Difference in means with a bootstrap 95% interval, also for each half of the flag on its own so it is clear which part carries the result.</dd>
+        </dl>
+      </Section>
+
     </div>
   )
 }

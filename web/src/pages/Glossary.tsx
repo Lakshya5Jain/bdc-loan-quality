@@ -17,7 +17,8 @@ const GROUPS: { title: string; terms: [string, string][] }[] = [
     ['late_marks', 'Late marks'], ['early_warning', 'Early warning'], ['went_bad', 'Went bad'], ['loss_exit', 'Loss exit rate'],
     ['mark_gap', 'Mark gap (stale marks)'], ['stale_generosity', 'Generosity on shared borrowers'], ['no_second_opinion', 'No-second-opinion share'],
   ] },
-  { title: 'The stock', terms: [['nav', 'NAV'], ['p_nav', 'Price / NAV'], ['ret', 'Total return'], ['div_yield', 'Dividend yield'], ['nav_chg', 'NAV change']] },
+  { title: 'The stock', terms: [['nav', 'NAV'], ['p_nav', 'Price / NAV'], ['ret', 'Total return'], ['div_yield', 'Dividend yield'], ['nav_chg', 'NAV change'],
+    ['asset_coverage', 'Asset coverage'], ['coverage_distance', 'Distance to the 150% minimum'], ['forced_seller', 'Forced-seller flag']] },
 ]
 
 export default function Glossary() {

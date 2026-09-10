@@ -347,3 +347,22 @@ def test_strategy_lab_tables(con):
     assert bad == 0
     # existing strategy tables untouched
     assert con.execute("SELECT quarters_won FROM signals.strategy_summary").fetchone()[0] >= 1
+
+
+def test_forced_seller_tables(con):
+    bad = con.execute(
+        """
+        SELECT count(*) FROM signals.forced_seller
+        WHERE (coverage IS NOT NULL AND (coverage < 1.2 OR coverage > 6))
+           OR (coverage IS NOT NULL AND abs(distance_pts - (coverage - 1.5) * 100) > 1e-9)
+           OR (flagged AND NOT (near_limit AND b90_up_2q))
+           OR (exit_loss_fwd2 IS NOT NULL AND exit_loss_fwd2 < 0)
+        """
+    ).fetchone()[0]
+    assert bad == 0
+    n, n_cov = con.execute("SELECT count(*), count(coverage) FROM signals.forced_seller").fetchone()
+    assert n > 0 and n_cov / n > 0.6, (n, n_cov)
+    tests = con.execute("SELECT comparison, ci_lo, ci_hi, diff FROM signals.forced_seller_test").fetchall()
+    assert tests
+    for _, lo, hi, d in tests:
+        assert lo <= d <= hi

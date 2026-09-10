@@ -26,7 +26,11 @@ type Detail = {
   bdc: { cik: number; name: string; ticker: string | null; is_public: boolean; file_no: string | null }
   quarters: Quarter[]; migration: Migration[]; screen: ScreenRow | null
   generosity: { period_end: string; n_shared: number; generosity: number | null; n_marked_above: number; n_marked_below: number; n_peer_nonaccrual_not_flagged: number }[]
+  forced_seller?: Forced[]
+  forced_seller_test?: ForcedTest[]
 }
+type Forced = { period_end: string; coverage: number | null; coverage_source: string | null; distance_pts: number | null; near_limit: boolean | null; b90_up_2q: boolean; flagged: boolean | null; pct_debt_below_90: number | null; exit_loss_fwd2: number | null; fwd2_observed: boolean }
+type ForcedTest = { comparison: string; n_flagged: number; rate_flagged: number; n_unflagged: number; rate_unflagged: number; diff: number; ci_lo: number; ci_hi: number; ratio: number | null; p_diff_positive: number }
 type Loan = {
   loan_id: string; identifier: string; issuer_name: string; issuer_norm: string; instrument_type: string
   instrument_subtype: string | null; is_debt: boolean; industry: string | null; fair_value: number | null
@@ -141,6 +145,39 @@ export default function BdcDetail() {
       </div>
       <p className="note">All shares are of the debt book at cost. "Δ4q" is the change against the same quarter a year ago. Hover any table header for a definition.</p>
       </Section>
+
+      {data.forced_seller && data.forced_seller.length > 0 && (() => {
+        const fs = data.forced_seller
+        const last = fs[fs.length - 1]
+        const t = (data.forced_seller_test ?? []).find((x) => x.comparison.startsWith('public: flag'))
+        const flaggedQ = fs.filter((f) => f.flagged).map((f) => f.period_end)
+        return (
+          <Section title="Distance to the leverage limit" meta={`as of ${last.period_end}`}>
+            <div className="stats">
+              <Stat k="Asset coverage" v={last.coverage == null ? 'n/a' : pct(last.coverage, 0)} d={last.coverage_source ? `${last.coverage_source} · minimum 150%` : 'no balance-sheet tags'} cls={last.coverage != null && last.coverage <= 1.7 ? 'neg' : ''} />
+              <Stat k="Room above minimum" v={last.distance_pts == null ? 'n/a' : `${num(last.distance_pts, 0)} pts`} d={last.near_limit ? 'within 20 points' : 'more than 20 points'} cls={last.near_limit ? 'neg' : 'pos'} />
+              <Stat k="Loans below 90" v={pct(last.pct_debt_below_90)} d={last.b90_up_2q ? 'up two quarters running' : 'not rising two quarters running'} cls={last.b90_up_2q ? 'neg' : ''} />
+              <Stat k="Forced-seller flag" v={last.flagged ? 'FLAG' : 'no'} d={flaggedQ.length ? `flagged in ${flaggedQ.length} past quarter${flaggedQ.length > 1 ? 's' : ''}` : 'never flagged'} cls={last.flagged ? 'neg' : ''} />
+            </div>
+            <Explain kind={last.flagged ? 'warn' : 'quiet'}>
+              <p><b>What this means.</b> {G.forced_seller}{t && <> Across all public BDCs, flagged quarters were followed by loans sold at a loss worth {pct(t.rate_flagged)} of the book over the next two quarters, against {pct(t.rate_unflagged)} for the rest ({t.n_flagged} flagged quarters; 95% interval on the difference {signedPct(t.ci_lo)} to {signedPct(t.ci_hi)}).</>} Coverage comes from the filer's own tag where it reports one, otherwise from net assets and debt on the balance sheet.</p>
+            </Explain>
+            <details className="panel">
+              <summary>Quarter by quarter</summary>
+              <DataTable data={fs} columns={[
+                { header: 'Quarter', accessorKey: 'period_end', left: true },
+                { header: 'Asset coverage', accessorKey: 'coverage', cell: (c) => { const v = c.getValue<number | null>(); return v == null ? '' : pct(v, 0) } },
+                { header: 'Source', accessorKey: 'coverage_source', left: true },
+                { header: 'Room, pts', accessorKey: 'distance_pts', cell: (c) => num(c.getValue<number | null>(), 0) },
+                { header: 'Loans below 90', accessorKey: 'pct_debt_below_90', cell: (c) => pct(c.getValue<number | null>()) },
+                { header: 'Rising 2q', accessorKey: 'b90_up_2q', cell: (c) => c.getValue<boolean>() ? 'yes' : '' },
+                { header: 'Flag', accessorKey: 'flagged', cell: (c) => c.getValue<boolean | null>() ? <span className="tag short">flag</span> : '' },
+                { header: 'Loss exits, next 2q', accessorKey: 'exit_loss_fwd2', tip: 'Cost of loans that left the book with a last mark below 0.90 over the following two quarters, as a share of the debt book.', cell: (c) => c.row.original.fwd2_observed ? pct(c.getValue<number | null>()) : <span className="muted small">not yet</span> },
+              ] as Col<Forced>[]} initialSort={[{ id: 'period_end', desc: true }]} />
+            </details>
+          </Section>
+        )
+      })()}
 
       <Section title="How the book has moved">
       <div className="row">
