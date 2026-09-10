@@ -52,7 +52,7 @@ export function Results() {
     { header: 'Long book', accessorKey: 'long_excess', tip: 'Average return of the long book over its holding period, minus the sector.', cell: (c) => <span className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</span> },
     { header: 'Short book', accessorKey: 'short_excess', tip: 'Average return of the short book over its holding period, minus the sector. Negative is good for a short.', cell: (c) => <span className={c.getValue<number>() <= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</span> },
     { header: 'Long minus short', accessorKey: 'spread', tip: 'What the long/short book made, before costs.', cell: (c) => <b className={c.getValue<number>() >= 0 ? 'pos' : 'neg'}>{signedPct(c.getValue<number>())}</b> },
-    { header: 'Sector', accessorKey: 'universe_ret', tip: 'Equal-weight return of all BDCs over the same windows, for context. The strategy is measured net of this.', cell: (c) => <span className="muted">{signedPct(c.getValue<number>())}</span> },
+    { header: 'Sector', accessorKey: 'universe_ret', tip: 'Equal-weight return of the liquid public BDCs over the same windows, for context. The strategy is measured net of this.', cell: (c) => <span className="muted">{signedPct(c.getValue<number>())}</span> },
     { header: 'Longs', accessorKey: 'longs', left: true, wrap: true, cell: (c) => <span className="small muted">{c.getValue<string>().replace(/,/g, ', ')}</span> },
     { header: 'Shorts', accessorKey: 'shorts', left: true, wrap: true, cell: (c) => <span className="small muted">{c.getValue<string>().replace(/,/g, ', ')}</span> },
   ]

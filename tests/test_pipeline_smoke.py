@@ -214,3 +214,58 @@ def test_backtest_tables(con):
     # no forward return may be measured before the filing was public
     leak = con.execute("SELECT count(*) FROM signals.bt_universe WHERE filed > rebal_date").fetchone()[0]
     assert leak == 0
+    leak = con.execute("SELECT count(*) FROM signals.bt_event_universe WHERE filed >= entry_date").fetchone()[0]
+    assert leak == 0
+
+
+def test_event_backtest_buckets_and_benchmark(con):
+    # every filing sits in a calendar-quarter bucket (Saratoga's May quarter joins June)
+    bad = con.execute(
+        "SELECT count(*) FROM signals.bt_event_universe WHERE extract(month FROM qtr) NOT IN (3, 6, 9, 12)"
+    ).fetchone()[0]
+    assert bad == 0
+    assert con.execute("SELECT count(*) FROM signals.bt_event_universe WHERE ticker = 'SAR'").fetchone()[0] >= 8
+    # the benchmark is the tradable universe, never a handful of names
+    n_min = con.execute("SELECT min(n_bench) FROM signals.bt_event_universe").fetchone()[0]
+    assert n_min >= 12, n_min
+
+
+def test_live_book_skips_missing_inputs(con):
+    # a missing input is NULL, not ranked as the best; health averages what exists
+    rows = con.execute(
+        """
+        SELECT ticker, nav_chg_4q, nav_chg_4q_rank, n_inputs, health,
+               pct_debt_below_90_rank, pct_debt_below_95_rank, debt_mark_rank
+        FROM signals.strategy_latest
+        """
+    ).fetchall()
+    assert rows
+    for t, nav, nav_r, n_in, health, r90, r95, rmk in rows:
+        if nav is None:
+            assert nav_r is None, t
+        assert n_in >= 2, t
+        parts = [x for x in ((1 - r90) if r90 is not None else None, (1 - r95) if r95 is not None else None, rmk, nav_r)
+                 if x is not None]
+        assert abs(health - sum(parts) / len(parts)) < 1e-9, t
+    ranks = con.execute(
+        "SELECT min(pct_debt_below_90_rank), max(pct_debt_below_90_rank) FROM signals.strategy_latest"
+    ).fetchone()
+    assert ranks == (0.0, 1.0), ranks
+
+
+def test_nav_change_is_one_year_apart(con):
+    # nav_chg_4q compares with the quarter about a year earlier by date, not four rows back
+    bad = con.execute(
+        """
+        WITH f AS (
+            SELECT f.cik, f.period_end, f.nav_chg_4q, f.nav_per_share,
+                   (SELECT x.nav_per_share FROM signals.bdc_fundamentals x WHERE x.cik = f.cik
+                      AND x.period_end BETWEEN f.period_end - INTERVAL 385 DAY AND f.period_end - INTERVAL 345 DAY
+                    ORDER BY x.period_end DESC LIMIT 1) AS nav_1y
+            FROM signals.bdc_fundamentals f
+        )
+        SELECT count(*) FROM f
+        WHERE nav_chg_4q IS NOT NULL AND (nav_1y IS NULL OR abs(nav_per_share / nav_1y - 1 - nav_chg_4q) > 1e-9)
+        """
+    ).fetchone()[0]
+    assert bad == 0

@@ -119,12 +119,24 @@ def build_fundamentals(con: duckdb.DuckDBPyConnection) -> str:
                    4 * gross_income / nullif(net_assets + coalesce(debt, 0), 0) AS gross_yield_on_capital,
                    realized_gl / nullif(net_assets, 0) AS realized_gl_rate,
                    pik_income / nullif(gross_income, 0) AS pik_income_share,
-                   nav_per_share / nullif(lag(nav_per_share, 1) OVER w, 0) - 1 AS nav_chg_1q,
-                   nav_per_share / nullif(lag(nav_per_share, 4) OVER w, 0) - 1 AS nav_chg_4q,
-                   shares / nullif(lag(shares, 4) OVER w, 0) - 1 AS share_chg_4q,
-                   nii / nullif(lag(nii, 4) OVER w, 0) - 1 AS nii_chg_4q
+                   nav_per_share / nullif(q1.nav_1q, 0) - 1 AS nav_chg_1q,
+                   nav_per_share / nullif(q4.nav_4q, 0) - 1 AS nav_chg_4q,
+                   shares / nullif(q4.shares_4q, 0) - 1 AS share_chg_4q,
+                   nii / nullif(q4.nii_4q, 0) - 1 AS nii_chg_4q
             FROM base b
-            WINDOW w AS (PARTITION BY cik ORDER BY period_end)
+            -- the comparison quarter is found by date, not by row: a quarter missing from the
+            -- data (failed reconciliation, late filing) must not turn "one year ago" into five
+            -- quarters ago
+            LEFT JOIN LATERAL (
+                SELECT x.nav_per_share AS nav_1q FROM base x WHERE x.cik = b.cik
+                  AND x.period_end BETWEEN b.period_end - INTERVAL 105 DAY AND b.period_end - INTERVAL 75 DAY
+                ORDER BY x.period_end DESC LIMIT 1
+            ) q1 ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT x.nav_per_share AS nav_4q, x.shares AS shares_4q, x.nii AS nii_4q FROM base x WHERE x.cik = b.cik
+                  AND x.period_end BETWEEN b.period_end - INTERVAL 385 DAY AND b.period_end - INTERVAL 345 DAY
+                ORDER BY x.period_end DESC LIMIT 1
+            ) q4 ON TRUE
         )
         SELECT * FROM derived
         """

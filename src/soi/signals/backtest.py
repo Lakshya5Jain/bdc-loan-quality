@@ -41,6 +41,8 @@ ROUND_TRIP_COST = 0.004  # 40 bp round trip on each leg, applied to the quintile
 # a name is tradable at a date only if its median daily dollar volume over the prior 120
 # trading days is at least this (Firsthand at 3 cents and Franklin BSP at zero volume are not)
 MIN_DOLLAR_VOLUME = 100_000
+# the calendar quarter a fiscal period end falls in, as its last day (May 31 -> June 30)
+QTR_SQL = "last_day(date_trunc('quarter', {col}) + INTERVAL 2 MONTH)"
 
 
 @dataclass(frozen=True)
@@ -98,9 +100,10 @@ def _build_universe(con: duckdb.DuckDBPyConnection) -> None:
         f"""
         CREATE OR REPLACE TABLE signals.bt_universe AS
         WITH quarters AS (
-            SELECT DISTINCT period_end FROM signals.bdc_quarter
+            -- calendar quarter buckets; an off-cycle fiscal quarter (Saratoga's May 31) joins
+            -- the calendar quarter it falls in (June 30)
+            SELECT DISTINCT {QTR_SQL.format(col="period_end")} AS period_end FROM signals.bdc_quarter
             WHERE period_end >= DATE '2022-09-30'
-              AND extract(month FROM period_end) IN (3, 6, 9, 12)
         ),
         dates AS (
             SELECT period_end, period_end + INTERVAL {REBALANCE_LAG_DAYS} DAY AS rebal_date,
@@ -134,27 +137,27 @@ def _build_universe(con: duckdb.DuckDBPyConnection) -> None:
             GROUP BY 1, 2
         ),
         u AS (
-            SELECT a.*, coalesce(av.first_filed, ps.filed) AS filed, ps.adsh,
+            SELECT a.*, ps.period_end AS fiscal_period, coalesce(av.first_filed, ps.filed) AS filed, ps.adsh,
                    a.adj_exit / nullif(a.adj_entry, 0) - 1 AS fwd_ret,
                    a.adj_entry / nullif(a.adj_6m_ago, 0) - 1 AS ret_6m,
                    a.adj_entry / nullif(a.adj_3m_ago, 0) - 1 AS ret_3m,
                    a.close_entry / nullif(f.nav_per_share, 0) AS p_nav
             FROM at_date a
-            JOIN core.period_source ps ON ps.cik = a.cik AND ps.period_end = a.period_end
-            LEFT JOIN avail av ON av.cik = a.cik AND av.period_end = a.period_end
-            LEFT JOIN signals.bdc_fundamentals f ON f.cik = a.cik AND f.period_end = a.period_end
+            JOIN core.period_source ps ON ps.cik = a.cik AND {QTR_SQL.format(col="ps.period_end")} = a.period_end
+            LEFT JOIN avail av ON av.cik = a.cik AND av.period_end = ps.period_end
+            LEFT JOIN signals.bdc_fundamentals f ON f.cik = a.cik AND f.period_end = ps.period_end
             JOIN liq ON liq.rebal_date = a.rebal_date AND liq.ticker = a.ticker
             WHERE coalesce(av.first_filed, ps.filed) <= a.rebal_date
               AND liq.dollar_vol >= {MIN_DOLLAR_VOLUME}
         )
-        SELECT u.period_end, u.rebal_date, u.next_rebal, u.cik, u.ticker, u.filed,
+        SELECT u.period_end, u.fiscal_period, u.rebal_date, u.next_rebal, u.cik, u.ticker, u.filed,
                u.fwd_ret, u.ret_6m, u.ret_3m, u.p_nav, b.data_ok, b.n_debt,
                {sig_cols}
         FROM u
-        JOIN signals.bdc_quarter b ON b.cik = u.cik AND b.period_end = u.period_end
-        LEFT JOIN signals.bdc_generosity g ON g.cik = u.cik AND g.period_end = u.period_end
-        LEFT JOIN signals.bdc_validated v ON v.cik = u.cik AND v.period_end = u.period_end
-        LEFT JOIN signals.bdc_fundamentals f ON f.cik = u.cik AND f.period_end = u.period_end
+        JOIN signals.bdc_quarter b ON b.cik = u.cik AND b.period_end = u.fiscal_period
+        LEFT JOIN signals.bdc_generosity g ON g.cik = u.cik AND g.period_end = u.fiscal_period
+        LEFT JOIN signals.bdc_validated v ON v.cik = u.cik AND v.period_end = u.fiscal_period
+        LEFT JOIN signals.bdc_fundamentals f ON f.cik = u.cik AND f.period_end = u.fiscal_period
         WHERE b.data_ok AND b.n_debt >= 10 AND u.adj_entry IS NOT NULL AND u.close_entry IS NOT NULL
         """
     )
@@ -395,14 +398,14 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
             WHERE form IN ('10-Q', '10-K', '10-KT', '10-QT') GROUP BY 1, 2
         ),
         ev AS (
-            SELECT ps.cik, m.ticker, ps.period_end, coalesce(av.first_filed, ps.filed) AS filed,
+            SELECT ps.cik, m.ticker, ps.period_end, {QTR_SQL.format(col="ps.period_end")} AS qtr,
+                   coalesce(av.first_filed, ps.filed) AS filed,
                    lead(coalesce(av.first_filed, ps.filed)) OVER (PARTITION BY ps.cik ORDER BY ps.period_end) AS next_filed
             FROM core.period_source ps JOIN ref.bdc_master m USING (cik)
             LEFT JOIN avail av ON av.cik = ps.cik AND av.period_end = ps.period_end
             JOIN signals.bdc_quarter b ON b.cik = ps.cik AND b.period_end = ps.period_end
             WHERE m.is_public AND m.ticker IS NOT NULL AND b.data_ok AND b.n_debt >= 10
               AND ps.period_end >= DATE '2022-09-30'
-              AND extract(month FROM ps.period_end) IN (3, 6, 9, 12)
         ),
         px AS (SELECT ticker, date, close, adj_close FROM market.prices),
         px2 AS (SELECT ticker, date, close, volume FROM market.prices),
@@ -421,18 +424,28 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
                    (SELECT adj_close FROM px WHERE px.ticker = d.ticker AND px.date = d.exit_date) AS adj_exit
             FROM dated d WHERE d.entry_date IS NOT NULL AND d.exit_date IS NOT NULL
         ),
-        -- equal-weight return of every other public name over the same window
+        -- equal-weight return over the same window of every other name that was itself in the
+        -- tradable universe when the window opened: a trusted quarter ending in the prior 200
+        -- days (by period, not filing date, so the first filers of a season are still measured
+        -- against the whole sector) and the liquidity gate (defunct or untraded tickers such as
+        -- Firsthand, Franklin BSP or Newtek after its bank conversion must not move the benchmark)
+        windows AS (SELECT DISTINCT entry_date, exit_date FROM priced),
+        tradable AS (
+            SELECT DISTINCT w.entry_date, w.exit_date, d.ticker
+            FROM windows w
+            JOIN dated d ON d.period_end <= w.entry_date AND d.period_end > w.entry_date - INTERVAL 200 DAY
+            WHERE (SELECT median(close * volume) FROM px2 WHERE px2.ticker = d.ticker
+                       AND px2.date <= w.entry_date AND px2.date > w.entry_date - INTERVAL 180 DAY) >= {MIN_DOLLAR_VOLUME}
+        ),
         bench AS (
             SELECT p.cik, p.period_end,
-                   avg(o.adj_exit / o.adj_entry - 1) AS bench_ret
+                   avg(o.adj_exit / o.adj_entry - 1) AS bench_ret, count(*) AS n_bench
             FROM priced p
             JOIN (
-                SELECT m.ticker,
-                       p2.entry_date, p2.exit_date,
-                       (SELECT adj_close FROM px WHERE px.ticker = m.ticker AND px.date = p2.entry_date) AS adj_entry,
-                       (SELECT adj_close FROM px WHERE px.ticker = m.ticker AND px.date = p2.exit_date) AS adj_exit
-                FROM (SELECT DISTINCT entry_date, exit_date FROM priced) p2
-                CROSS JOIN ref.bdc_master m WHERE m.is_public AND m.ticker IS NOT NULL
+                SELECT t.ticker, t.entry_date, t.exit_date,
+                       (SELECT adj_close FROM px WHERE px.ticker = t.ticker AND px.date = t.entry_date) AS adj_entry,
+                       (SELECT adj_close FROM px WHERE px.ticker = t.ticker AND px.date = t.exit_date) AS adj_exit
+                FROM tradable t
             ) o ON o.entry_date = p.entry_date AND o.exit_date = p.exit_date AND o.ticker <> p.ticker
                  AND o.adj_entry > 0 AND o.adj_exit > 0
             GROUP BY 1, 2
@@ -441,7 +454,7 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
             SELECT p.*, b.pct_debt_below_90, b.pct_debt_below_95, b.debt_mark, b.new_deterioration_rate,
                    b.d4_pct_debt_below_90, b.nonaccrual_pct_cost, f.nav_chg_4q, f.nav_chg_1q,
                    p.close_entry / nullif(f.nav_per_share, 0) AS p_nav,
-                   p.adj_exit / p.adj_entry - 1 AS fwd_ret, bn.bench_ret,
+                   p.adj_exit / p.adj_entry - 1 AS fwd_ret, bn.bench_ret, bn.n_bench,
                    p.adj_exit / p.adj_entry - 1 - bn.bench_ret AS excess_ret,
                    date_diff('day', p.entry_date, p.exit_date) AS hold_days
             FROM priced p
@@ -470,11 +483,11 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
             ) WHERE u.{s} IS NOT NULL
             """
         )
-    df = con.execute("SELECT * FROM signals.bt_event_universe ORDER BY period_end, ticker").pl()
+    df = con.execute("SELECT * FROM signals.bt_event_universe ORDER BY qtr, ticker").pl()
     higher_worse = {s.name: s.higher_is_worse for s in SIGNALS}
     rows: list[tuple] = []
-    for pe in df["period_end"].unique(maintain_order=True).to_list():
-        g = df.filter(pl.col("period_end") == pe)
+    for pe in df["qtr"].unique(maintain_order=True).to_list():
+        g = df.filter(pl.col("qtr") == pe)
         if g.height < MIN_NAMES:
             continue
         ret = g["excess_ret"].to_list()
@@ -514,7 +527,7 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
         out.append((s, len(ics), sum(ics) / len(ics), _tstat(ics), sum(1 for x in ics if x > 0) / len(ics),
                     mean_sp, _tstat(sp) if sp else None, ann, hold))
     con.executemany("INSERT INTO signals.bt_event_summary VALUES (?,?,?,?,?,?,?,?,?)", out)
-    n = con.execute("SELECT count(*), count(DISTINCT period_end) FROM signals.bt_event_universe").fetchone()
+    n = con.execute("SELECT count(*), count(DISTINCT qtr) FROM signals.bt_event_universe").fetchone()
     log(build_default_strategy(con))
     return f"event backtest: {n[0]} filings, {n[1]} quarters, {len(EVENT_SIGNALS)} signals"
 
@@ -543,12 +556,12 @@ def build_default_strategy(con: duckdb.DuckDBPyConnection) -> str:
       signals.strategy_latest   the live book: every liquid public BDC ranked, with side and the
                                 four inputs, from its most recent filing
       signals.strategy_summary  one row of headline statistics"""
-    df = con.execute("SELECT * FROM signals.bt_event_universe ORDER BY period_end, ticker").pl()
+    df = con.execute("SELECT * FROM signals.bt_event_universe ORDER BY qtr, ticker").pl()
     rows = df.to_dicts()
     periods: list[tuple] = []
     by_q: dict = {}
     for r in rows:
-        by_q.setdefault(r["period_end"], []).append(r)
+        by_q.setdefault(r["qtr"], []).append(r)
     for pe, rs in sorted(by_q.items()):
         scored = sorted(((_health(r), r) for r in rs if _health(r) is not None and r["excess_ret"] is not None), key=lambda t: t[0])
         if len(scored) < MIN_NAMES:
@@ -600,21 +613,31 @@ def build_default_strategy(con: duckdb.DuckDBPyConnection) -> str:
             WHERE l.rn = 1 AND l.period_end >= (SELECT max(period_end) FROM lastq) - INTERVAL 200 DAY
               AND px.dollar_vol >= {MIN_DOLLAR_VOLUME}
         ),
+        -- percentile among the names that have the input (share of others below, ties half),
+        -- the same definition as the backtest; a missing input (a BDC too new for a one-year
+        -- NAV change) is NULL, never "best"
         pct AS (
             SELECT c.cik, c.ticker, c.period_end, c.filed, c.entry_date, c.close_entry, c.p_nav,
                    c.pct_debt_below_90, c.pct_debt_below_95, c.debt_mark, c.nav_chg_4q,
-                   {", ".join(f"percent_rank() OVER (ORDER BY c.{s}) AS {s}_rank" for s in DEFAULT_SIGNALS)}
+                   {", ".join(
+                       f"CASE WHEN c.{s} IS NULL THEN NULL ELSE "
+                       f"(rank() OVER (PARTITION BY c.{s} IS NULL ORDER BY c.{s}) - 1 "
+                       f"+ 0.5 * (count(*) OVER (PARTITION BY c.{s}) - 1)) "
+                       f"/ nullif(count(c.{s}) OVER () - 1, 0) END AS {s}_rank"
+                       for s in DEFAULT_SIGNALS)}
             FROM cur c
         ),
         scored AS (
             SELECT *,
-                   ((1 - pct_debt_below_90_rank) + (1 - pct_debt_below_95_rank) + debt_mark_rank + nav_chg_4q_rank) / 4 AS health
+                   list_aggregate(list_filter([1 - pct_debt_below_90_rank, 1 - pct_debt_below_95_rank,
+                                               debt_mark_rank, nav_chg_4q_rank], x -> x IS NOT NULL), 'avg') AS health,
+                   len(list_filter([pct_debt_below_90_rank, pct_debt_below_95_rank, debt_mark_rank, nav_chg_4q_rank],
+                                   x -> x IS NOT NULL)) AS n_inputs
             FROM pct
-            WHERE pct_debt_below_90 IS NOT NULL AND pct_debt_below_95 IS NOT NULL AND debt_mark IS NOT NULL
         ),
         ranked AS (
             SELECT *, rank() OVER (ORDER BY health DESC) AS rank, count(*) OVER () AS n
-            FROM scored
+            FROM scored WHERE n_inputs >= 2
         )
         SELECT r.*, m.name,
                CASE WHEN rank <= greatest(2, floor(n * {DEFAULT_SIDE_FRACTION})) THEN 'long'

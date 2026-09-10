@@ -172,6 +172,7 @@ INDUSTRY_VOCAB_DEFAULT: tuple[str, ...] = (
     "Trucking", "Property & Casualty Insurance", "Insurance Brokers", "Asset Management & Custody Banks",
     "Specialty Finance", "Financial Services: Insurance", "Business Products & Services",
     "Consumer Products & Services", "Healthcare Products & Services", "Technology & Telecommunications",
+    "Cannabis",
 )
 
 
@@ -191,6 +192,7 @@ _SUFFIX_COMMA_RE = re.compile(
     re.IGNORECASE,
 )
 _KV_RE = re.compile(r"\b([A-Z]{2,4})=(\S+)")
+_CURRENCY_RE = re.compile(r"^(USD|EUR|GBP|CAD|AUD|CHF|DKK|SEK|NOK|JPY|NZD|SGD|HKD|PLN|CZK)$")
 _PCT_RE = re.compile(r"\(?-?\s*\d+(\.\d+)?\s?%\)?")
 _SEQ_RE = re.compile(r"\s+\d{1,3}(\.\d{1,2})?$")
 
@@ -357,12 +359,29 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
     # segment that is not a category label. Never cut inside it (co-borrower names contain words
     # like Equity, Debt, Preferred, Fund).
     if "|" in head:
+        cands: list[str] = []
         for seg in head.split("|"):
             seg = _clean_token(_CATEGORY_HEAD_RE.sub("", seg.strip(), count=1))
             if not seg or CATEGORY_TOKEN_RE.match(seg) or _VOCAB_ONLY_RE.match(seg):
                 continue
             if RATE_DATE_RE.search(seg) and not CORP_SUFFIX_RE.search(seg):
                 continue
+            if _CURRENCY_RE.match(seg):  # "High Tech Industries | DKK | International Senior Loan Program"
+                continue
+            cands.append(seg)
+        # "Cannabis | Devi Holdings Inc." / "First Lien Debt | Pharmaceuticals | Bamboo US BidCo LLC
+        # Term Loan": a segment that is nothing but an industry name is a heading, not the
+        # issuer; prefer the first segment that is not one
+        named = [c for c in cands if industry_re.sub("", c, count=1).strip()]
+        if named or cands:
+            seg = (named or cands)[0]
+            # trailing instrument words after the legal suffix ("Bamboo US BidCo LLC Initial
+            # Dollar Term Loan", "P.J. Fitzpatrick LLC, Revolver") are not part of the name
+            cut = _cut_at_suffix(seg)
+            if cut and len(cut) < len(seg) and len(cut.split()) >= 2:
+                rest = seg[len(cut):].strip(" ,;-")
+                if rest and classify_instrument(rest)[0] != "unknown" and not STRONG_SUFFIX_RE.search(rest):
+                    return cut
             return seg
     # strip category labels first, then drop attribute clauses (Interest Rate ..., Maturity
     # Date ..., SOFR + ...) that follow the issuer name

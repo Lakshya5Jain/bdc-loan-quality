@@ -49,7 +49,7 @@ export default function Overview() {
 
       <Section title="What we found, in brief">
         <Explain kind="info">
-          <p><b>The sickness of the book predicts the stock.</b> Ranking BDCs by the share of loans already marked below 90 cents on the dollar ranked the next quarter correctly in every one of the fifteen quarters tested. The combined health score won fourteen of fifteen, by about {s ? signedPct(s.mean_spread) : '4.7%'} per quarter between the healthy and sick groups, net of the sector and before costs.</p>
+          <p><b>The sickness of the book predicts the stock.</b> Ranking BDCs by the share of loans already marked below 90 cents on the dollar ranked the next quarter correctly in every one of the fifteen quarters tested. The combined health score won {s ? `${s.quarters_won} of ${s.n_quarters}` : '15 of 15'}, by about {s ? signedPct(s.mean_spread) : '4.5%'} per quarter between the healthy and sick groups, net of the sector and before costs.</p>
           <p><b>The number everyone quotes does not.</b> Headline non-accruals, price to NAV and recent momentum carried no information about the next quarter on their own. The marks lead; the labels lag.</p>
           <p><b>What could still be wrong.</b> Fifteen quarters is one credit cycle; each side of the book holds about nine stocks; BDCs delisted since 2022 are missing from the test; returns are before the cost of borrowing stock to short. <Link to="/results">Every caveat is on the results page.</Link></p>
         </Explain>

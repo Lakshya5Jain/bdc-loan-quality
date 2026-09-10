@@ -52,7 +52,7 @@ long book  = healthiest fifth      short book = sickest fifth      equal dollars
           <li><b>Enter on the filing day.</b> Each BDC is scored the day after its own quarterly report is public, using only that report and the other BDCs' reports already public that day.</li>
           <li><b>Rank against peers.</b> Four inputs, each turned into a percentile among the liquid public BDCs, averaged into a health score.</li>
           <li><b>Take positions.</b> The healthiest fifth is bought, the sickest fifth sold short, equal dollars, held until each name's next report (about 91 days).</li>
-          <li><b>Measure against the sector.</b> Each return, dividends included, has the equal-weight return of all other BDCs over the same window subtracted. The result is the quality spread, not BDC beta.</li>
+          <li><b>Measure against the sector.</b> Each return, dividends included, has the equal-weight return of all other liquid BDCs with a trusted quarter over the same window subtracted. The result is the quality spread, not BDC beta.</li>
           <li><b>Exclude what cannot be traded.</b> A name counts on a date only if it traded at least $100,000 a day over the prior six months.</li>
           <li><b>Repeat for every quarter since late 2022.</b> The record is shown quarter by quarter, not as an average alone. One quarter was rebuilt from scratch with separate code and matched.</li>
         </ol>

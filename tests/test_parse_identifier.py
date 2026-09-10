@@ -74,6 +74,15 @@ CASES = [
     ("RL Datix Holdings (USA), Inc. | First lien senior secured loan", "RL Datix Holdings Inc.", "first_lien", True),
     ("Integrity Marketing Acquisition, LLC |First lien senior secured loan | Non-Affiliated Issuer",
      "Integrity Marketing Acquisition LLC", "first_lien", True),
+    # industry written before the issuer (AFCG, and several private filers' breadcrumbs)
+    ("Cannabis | Devi Holdings Inc.", "Devi Holdings Inc.", "unknown", False),
+    ("Insurance | BCIS AH Borrower LLC", "BCIS AH Borrower LLC", "unknown", False),
+    ("Non-Controlled, Non-Affiliated Debt Investments | First Lien Senior Secured | Pharmaceuticals | "
+     "Bamboo US BidCo LLC Initial Delayed Draw Term Loan | 3M SOFR + 10.13% / 1.00% | 1.00%/3.75% | 9/30/2030",
+     "Bamboo US BidCo LLC", "first_lien", True),
+    ("Senior loans 238.6% | Diversified consumer services 28.8% | P.J. Fitzpatrick LLC, Revolver",
+     "P.J. Fitzpatrick LLC", "first_lien", True),
+    ("High Tech Industries | DKK | International Senior Loan Program Llc", "Senior Loan Program", "first_lien", True),
 ]
 
 
