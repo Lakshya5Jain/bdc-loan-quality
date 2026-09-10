@@ -65,6 +65,16 @@ def build_signals():
         typer.echo(_b(con))
 
 
+@build_app.command("fundamentals")
+def build_fundamentals_cmd():
+    """Income statement and balance sheet metrics per BDC-quarter (NII, coverage, leverage)."""
+    from soi.db import db
+    from soi.signals.fundamentals import build_fundamentals
+
+    with db() as con:
+        typer.echo(build_fundamentals(con))
+
+
 @build_app.command("screen")
 def build_screen():
     from soi.db import db
@@ -87,14 +97,27 @@ def build_insights_cmd():
 def build_all():
     from soi.db import db
     from soi.signals.bdc_rollup import build_signals
+    from soi.signals.fundamentals import build_fundamentals
     from soi.signals.insights import build_insights
     from soi.signals.market import build_screen
     from soi.transform.holdings import build_holdings
     from soi.transform.link_loans import build_loans
 
     with db() as con:
-        for step in (build_holdings, build_loans, build_signals, build_screen, build_insights):
+        for step in (build_holdings, build_loans, build_signals, build_fundamentals, build_screen, build_insights):
             typer.echo(step(con))
+
+
+@app.command()
+def backtest(event: bool = typer.Option(True, help="Also run the filing-day (event) variant")):
+    """Walk-forward backtest of every BDC-level signal on public BDC stock returns."""
+    from soi.db import db
+    from soi.signals.backtest import run_backtest, run_event_backtest
+
+    with db() as con:
+        typer.echo(run_backtest(con, log=typer.echo))
+        if event:
+            typer.echo(run_event_backtest(con, log=typer.echo))
 
 
 @app.command()
@@ -124,6 +147,24 @@ def ixfootnotes(
     with db() as con:
         typer.echo(build_ix_footnotes(con, public_only=not all_bdcs, since=since,
                                       keep_html=keep_html, limit=limit, log=typer.echo))
+
+
+@app.command("ixfacts")
+def ixfacts(
+    gaps: bool = typer.Option(True, help="Filings whose tagged detail covers 50-97% of the reported total"),
+    ticker: list[str] | None = typer.Option(None, help="Only these tickers"),
+    all_bdcs: bool = typer.Option(False, "--all", help="All BDCs, not only public ones"),
+    force: bool = typer.Option(False, help="Re-parse filings already done"),
+):
+    """Read holdings facts from the filing itself where the SEC bulk data misses rows (GSBD)."""
+    from soi.db import db
+    from soi.ingest.ixbrl import build_ix_facts, gap_filings
+
+    with db() as con:
+        todo = gap_filings(con, public_only=not all_bdcs) if gaps else []
+        if ticker:
+            todo = [t for t in todo if t[2] in ticker]
+        typer.echo(build_ix_facts(con, todo, log=typer.echo, force=force))
 
 
 @app.command("export-static")

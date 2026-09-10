@@ -90,22 +90,22 @@ def build_bdc_quarter(con: duckdb.DuckDBPyConnection) -> None:
                    sum(cost) AS total_cost,
                    sum(fair_value) FILTER (WHERE is_debt) AS debt_fv,
                    sum(cost) FILTER (WHERE is_debt) AS debt_cost,
-                   sum(cost) FILTER (WHERE is_debt AND mark < 0.95) AS debt_cost_below_95,
-                   sum(cost) FILTER (WHERE is_debt AND mark < 0.90) AS debt_cost_below_90,
-                   sum(cost) FILTER (WHERE is_debt AND mark < 0.80) AS debt_cost_below_80,
-                   sum(cost) FILTER (WHERE nonaccrual_flag) AS nonaccrual_cost,
-                   sum(fair_value) FILTER (WHERE nonaccrual_flag) AS nonaccrual_fv,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND mark < 0.95), 0) AS debt_cost_below_95,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND mark < 0.90), 0) AS debt_cost_below_90,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND mark < 0.80), 0) AS debt_cost_below_80,
+                   coalesce(sum(cost) FILTER (WHERE nonaccrual_flag), 0) AS nonaccrual_cost,
+                   coalesce(sum(fair_value) FILTER (WHERE nonaccrual_flag), 0) AS nonaccrual_fv,
                    count(*) FILTER (WHERE nonaccrual_flag) AS n_nonaccrual,
-                   sum(cost) FILTER (WHERE is_debt AND pik_flag) AS pik_cost,
-                   sum(cost) FILTER (WHERE is_debt AND crossed_below_95) AS new_deterioration_cost,
-                   sum(cost) FILTER (WHERE new_nonaccrual) AS new_nonaccrual_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND pik_flag), 0) AS pik_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND crossed_below_95), 0) AS new_deterioration_cost,
+                   coalesce(sum(cost) FILTER (WHERE new_nonaccrual), 0) AS new_nonaccrual_cost,
                    count(*) FILTER (WHERE new_nonaccrual) AS n_new_nonaccrual,
-                   sum(cost) FILTER (WHERE is_debt AND spread_up) AS spread_up_cost,
-                   sum(cost) FILTER (WHERE is_debt AND maturity_extended) AS extended_cost,
-                   sum(cost) FILTER (WHERE converted_to_equity) AS converted_cost,
-                   sum(cost) FILTER (WHERE is_debt AND mark_chg < -0.02) AS markdown_cost,
-                   sum(cost) FILTER (WHERE is_debt AND mark_chg > 0.02) AS markup_cost,
-                   sum(cost) FILTER (WHERE is_debt AND is_new) AS new_debt_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND spread_up), 0) AS spread_up_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND maturity_extended), 0) AS extended_cost,
+                   coalesce(sum(cost) FILTER (WHERE converted_to_equity), 0) AS converted_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND mark_chg < -0.02), 0) AS markdown_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND mark_chg > 0.02), 0) AS markup_cost,
+                   coalesce(sum(cost) FILTER (WHERE is_debt AND is_new), 0) AS new_debt_cost,
                    sum(spread * cost) FILTER (WHERE is_debt AND spread IS NOT NULL)
                        / nullif(sum(cost) FILTER (WHERE is_debt AND spread IS NOT NULL), 0) AS wavg_spread,
                    sum(rate * cost) FILTER (WHERE is_debt AND rate IS NOT NULL)
@@ -119,7 +119,7 @@ def build_bdc_quarter(con: duckdb.DuckDBPyConnection) -> None:
             -- loans whose last observation was the BDC's previous period, attributed to the
             -- period in which they disappeared
             SELECT l.cik, nxt.period_end,
-                   sum(l.last_cost) FILTER (WHERE l.last_mark < 0.9) AS exit_loss_cost,
+                   coalesce(sum(l.last_cost) FILTER (WHERE l.last_mark < 0.9), 0) AS exit_loss_cost,
                    sum(l.last_cost) AS exit_cost
             FROM core.loans l
             JOIN (
@@ -145,7 +145,7 @@ def build_bdc_quarter(con: duckdb.DuckDBPyConnection) -> None:
                    converted_cost / nullif(debt_cost, 0) AS converted_share,
                    markdown_cost / nullif(debt_cost, 0) AS markdown_share,
                    markup_cost / nullif(debt_cost, 0) AS markup_share,
-                   e.exit_loss_cost / nullif(debt_cost, 0) AS exit_loss_rate,
+                   coalesce(e.exit_loss_cost, 0) / nullif(debt_cost, 0) AS exit_loss_rate,
                    debt_fv / nullif(debt_cost, 0) AS debt_mark
             FROM base b LEFT JOIN exits e USING (cik, period_end)
         ),
@@ -182,7 +182,9 @@ def build_bdc_quarter(con: duckdb.DuckDBPyConnection) -> None:
         WITH z AS (
             SELECT q.*, {zcols}
             FROM signals.bdc_quarter q
-            WINDOW pw AS (PARTITION BY period_end, data_ok)
+            -- peers by calendar quarter so off-cycle fiscal quarters (Saratoga's Feb/May/Aug/Nov)
+            -- are compared with the nearest quarter end instead of standing alone
+            WINDOW pw AS (PARTITION BY date_trunc('quarter', period_end - INTERVAL 15 DAY), data_ok)
         ),
         s AS (
             SELECT z.*,

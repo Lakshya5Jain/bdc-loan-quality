@@ -5,7 +5,10 @@ Match order between consecutive observed periods of the same BDC:
   2. ident_key (identifier with percentages / whitespace normalised)
   3. (issuer_norm, instrument_type, instrument_subtype, maturity) unique on both sides
   4. (issuer_norm, instrument_type) unique on both sides
-  5. fuzzy issuer_norm (rapidfuzz >= 92) with unique instrument_type on both sides
+  5. (issuer_norm, debt/equity class) unique on both sides (a filer that starts writing
+     "First Lien Debt" where it wrote nothing changes instrument_type but not the loan)
+  6. same issuer and class, several tranches on both sides: paired by closest cost
+  7. fuzzy issuer_norm (rapidfuzz >= 92) with unique instrument_type on both sides
 Unmatched current rows start a new loan; unmatched prior rows are exits.
 """
 from __future__ import annotations
@@ -32,6 +35,18 @@ class Row:
     maturity: object
     fair_value: float | None
     cost: float | None
+
+    @property
+    def klass(self) -> str:
+        if self.instrument_type in ("first_lien", "second_lien", "subordinated", "structured", "debt_other"):
+            return "debt"
+        if self.instrument_type in ("equity", "preferred", "warrant", "equity_other"):
+            return "equity"
+        return "unknown"
+
+    @property
+    def amount(self) -> float:
+        return self.cost if self.cost is not None else (self.fair_value or 0.0)
 
 
 def _rows(df: pl.DataFrame) -> list[Row]:
@@ -109,6 +124,35 @@ def _match_period(prev: list[Row], cur: list[Row]) -> dict[int, tuple[int, str]]
         lambda r: (r.issuer_norm, r.instrument_type) if r.issuer_norm else None,
         unique_only=True,
     )
+
+    stage(
+        "issuer_class",
+        lambda r: (r.issuer_norm, r.klass) if r.issuer_norm and r.klass != "unknown" else None,
+        unique_only=True,
+    )
+    # several tranches of one issuer on both sides ("Term Loan 1", "Term Loan 2" renamed or
+    # renumbered): pair by closest cost, each within 35% of the other
+    prev_groups: dict = defaultdict(list)
+    for r in prev:
+        if r.idx not in used and r.issuer_norm and r.klass != "unknown":
+            prev_groups[(r.issuer_norm, r.klass)].append(r)
+    cur_groups: dict = defaultdict(list)
+    for r in cur:
+        if r.idx not in out and r.issuer_norm and r.klass != "unknown":
+            cur_groups[(r.issuer_norm, r.klass)].append(r)
+    for key, cs in cur_groups.items():
+        ps = [p for p in prev_groups.get(key, []) if p.idx not in used]
+        if not ps:
+            continue
+        pairs = sorted(((abs(c.amount - p.amount), c.idx, p.idx, c, p) for c in cs for p in ps),
+                       key=lambda t: t[0])
+        for diff, _, _, c, p in pairs:
+            if c.idx in out or p.idx in used:
+                continue
+            if diff > 0.35 * max(abs(c.amount), abs(p.amount), 1.0):
+                continue
+            out[c.idx] = (p.idx, "issuer_amount")
+            used.add(p.idx)
 
     # fuzzy issuer names for what is left (unique instrument type per issuer on both sides)
     remaining_prev = [r for r in prev if r.idx not in used and r.issuer_norm]

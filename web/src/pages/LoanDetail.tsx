@@ -2,7 +2,8 @@ import { Link, useParams } from 'react-router-dom'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts'
 import Stat from '../components/Stat'
 import { useApi } from '../lib/api'
-import { cls, mm, num, pct, signed } from '../lib/format'
+import { cls, mm, num, pct, signed, titleCase } from '../lib/format'
+import { Explain, PageHeader, Section } from '../components/Page'
 import { G } from '../lib/glossary'
 
 type Hist = {
@@ -36,7 +37,7 @@ export default function LoanDetail() {
   const first = data.history[0]
   const rk = data.risk[data.risk.length - 1]
   const summary = [
-    `${l.bdc_name} holds a ${l.instrument_type.replace(/_/g, ' ')} to ${l.issuer_name || 'this borrower'}${last?.cost ? ` with $${(last.cost / 1e6).toFixed(1)}mm at cost` : ''}.`,
+    `${titleCase(l.bdc_name)} holds a ${l.instrument_type.replace(/_/g, ' ')} to ${l.issuer_name || 'this borrower'}${last?.cost ? ` with $${(last.cost / 1e6).toFixed(1)}mm at cost` : ''}.`,
     last?.mark != null ? `It is currently marked at ${num(last.mark, 3)}${first?.mark != null && data.history.length > 1 ? ` (${first.mark > last.mark + 0.005 ? 'down' : first.mark < last.mark - 0.005 ? 'up' : 'unchanged'} from ${num(first.mark, 3)} when first seen in ${first.period_end.slice(0, 7)})` : ''}.` : 'No mark is available (cost was not reported).',
     last?.nonaccrual_flag ? 'The lender has it on non-accrual: interest is no longer being counted as income.' : last?.pik_flag ? 'It is paying interest in kind rather than cash.' : '',
     rk ? `Risk score ${rk.risk_score}: ${rk.risk_score >= 100 ? 'already impaired' : rk.risk_score >= 40 ? 'high chance of going bad within a year' : rk.risk_score >= 20 ? 'elevated' : 'low'}${rk.reasons.length ? ` (${rk.reasons.join('; ')})` : ' (no warning signs)'}.` : '',
@@ -44,12 +45,11 @@ export default function LoanDetail() {
   ].filter(Boolean).join(' ')
   return (
     <div>
-      <h1>{l.issuer_name || l.identifier}</h1>
+      <PageHeader eyebrow="Loan" title={l.issuer_name || l.identifier} ticker={l.ticker} lede={summary} />
       <div className="sub">
-        <Link to={`/bdcs/${l.cik}`}>{l.bdc_name}{l.ticker ? ` (${l.ticker})` : ''}</Link> · {l.instrument_type}{l.industry ? ` · ${l.industry}` : ''} · loan {l.loan_id}
-        {' · '}<Link to={`/borrowers/${encodeURIComponent(l.borrower_key)}`}>other lenders to this borrower</Link>
+        Held by <Link to={`/bdcs/${l.cik}`}>{titleCase(l.bdc_name)}{l.ticker ? ` (${l.ticker})` : ''}</Link> · {l.instrument_type.replace(/_/g, ' ')} · loan {l.loan_id}
+        {' · '}<Link to={`/borrowers/${encodeURIComponent(l.borrower_key)}`}>every lender to this borrower</Link>
       </div>
-      <div className="panel summary">{summary}</div>
       <div className="stats">
         <Stat k="Observed" v={`${l.n_periods} quarters`} d={`${l.first_period} → ${l.last_period}${l.exited ? ` · exited (${l.exit_type})` : ''}`} />
         <Stat k="Last mark" v={num(l.last_mark, 3)} d={`min ${num(l.min_mark, 3)}`} cls={l.last_mark != null && l.last_mark < 0.95 ? 'neg' : ''} />
@@ -58,6 +58,7 @@ export default function LoanDetail() {
           <Stat k="Risk score (latest)" v={data.risk[data.risk.length - 1].risk_score} d={data.risk[data.risk.length - 1].reasons.join('; ') || 'no warning signals'} cls={data.risk[data.risk.length - 1].risk_score >= 40 ? 'neg' : ''} />
         )}
       </div>
+      <Section title="Across quarters">
       <div className="row">
         <div className="panel">
           <h2 title={G.mark}>Mark and pricing over time (mark on the left axis, rates on the right)</h2>
@@ -77,23 +78,25 @@ export default function LoanDetail() {
         </div>
         {latestPeers.length > 0 && (
           <div className="panel">
-            <h2>Other BDCs holding this borrower ({latestPeers[0].period_end})</h2>
-            <table className="grid">
+            <h2>Every BDC holding this borrower ({latestPeers[0].period_end})</h2>
+            <div className="tablewrap"><table className="grid">
               <thead><tr><th className="l">BDC</th><th className="l">Type</th><th>FV $mm</th><th>Cost $mm</th><th>Mark</th><th>vs peers</th><th>NA</th></tr></thead>
               <tbody>
                 {latestPeers.map((p, i) => (
-                  <tr key={i}><td className="l"><Link to={`/bdcs/${p.cik}`}>{p.ticker ?? p.name}</Link></td><td className="l">{p.instrument_type}</td>
+                  <tr key={i}><td className="l"><Link to={`/bdcs/${p.cik}`}>{p.ticker ?? titleCase(p.name)}</Link></td><td className="l">{p.instrument_type}</td>
                     <td>{mm(p.fv)}</td><td>{mm(p.cost)}</td><td>{num(p.mark, 3)}</td>
                     <td className={cls(p.mark_vs_peers, true)}>{signed(p.mark_vs_peers == null ? null : p.mark_vs_peers * 100, 1, '%')}</td>
                     <td>{p.nonaccrual ? <span className="tag flag">NA</span> : ''}</td></tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </div>
+      </Section>
+      <Section title="Quarterly history">
+      <Explain kind="quiet"><p><b>How to read this.</b> One row per quarter the loan appeared in the schedule, newest first, with the exact identifier text the BDC filed and any footnote. "Match" is how the row was linked to the previous quarter: exact text, normalised text, borrower plus instrument, or fuzzy name.</p></Explain>
       <div className="panel">
-        <h2>Quarterly history</h2>
         <div className="tablewrap">
           <table className="grid">
             <thead><tr><th className="l">Period</th><th>FV $mm</th><th>Cost $mm</th><th>Principal</th><th>Mark</th><th>Δ</th><th>Rate</th><th>Spread</th><th>Floor</th><th>PIK</th><th className="l">Maturity</th><th className="l">Flags</th><th className="l">Match</th><th className="l">Identifier / footnotes</th></tr></thead>
@@ -114,6 +117,7 @@ export default function LoanDetail() {
           </table>
         </div>
       </div>
+      </Section>
     </div>
   )
 }

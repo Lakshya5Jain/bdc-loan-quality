@@ -330,14 +330,17 @@ def _scorecards(con: duckdb.DuckDBPyConnection) -> None:
             FROM (SELECT *, row_number() OVER (PARTITION BY cik ORDER BY period_end DESC) AS rn
                   FROM signals.bdc_generosity) WHERE rn <= 4 GROUP BY cik
         ),
-        size AS (SELECT cik, avg(debt_cost) AS avg_debt_cost, max(period_end) AS latest FROM signals.bdc_quarter GROUP BY cik)
+        -- loss exits are summed over the whole history, so express them per year of history
+        size AS (SELECT cik, avg(debt_cost) AS avg_debt_cost, max(period_end) AS latest, count(*) AS n_quarters
+                 FROM signals.bdc_quarter GROUP BY cik)
         SELECT m.cik, m.ticker, m.name, m.is_public, s.latest AS latest_period,
                miss.n_evaluated, miss.n_bad,
                CASE WHEN miss.n_evaluated >= 50 THEN miss.n_bad * 1.0 / miss.n_evaluated END AS bad_rate,
                CASE WHEN miss.n_par_loans >= 50 THEN miss.n_missed * 1.0 / miss.n_par_loans END AS late_mark_rate,
                early.n_new_na,
                CASE WHEN early.n_new_na >= 5 THEN early.n_warned * 1.0 / early.n_new_na END AS early_warning_rate,
-               losses.n_loss_exits, losses.loss_exit_cost / nullif(s.avg_debt_cost, 0) AS loss_exit_rate,
+               losses.n_loss_exits,
+               losses.loss_exit_cost / nullif(s.avg_debt_cost * greatest(s.n_quarters - 1, 1) / 4.0, 0) AS loss_exit_rate,
                gen.generosity_4q, gen.n_shared
         FROM ref.bdc_master m
         JOIN size s USING (cik)

@@ -119,6 +119,7 @@ async function staticGet<T>(url: string): Promise<T> {
 
   if (a === 'status') return load<T>('/status.json')
   if (a === 'screen') return load<T>('/screen.json')
+  if (a === 'strategy') return load<T>('/strategy.json')
   if (a === 'health') return { ok: true } as T
   if (a === 'insights' && b) return load<T>(`/insights/${b}.json`)
 
@@ -171,8 +172,9 @@ async function staticGet<T>(url: string): Promise<T> {
     const limit = Number(u.searchParams.get('limit') ?? 50)
     const idx = await load<Table>('/borrowers/index.json')
     const hit = (r: Row) =>
-      String(r.borrower_key ?? '').toLowerCase().includes(q) ||
-      String(r.issuer_name ?? '').toLowerCase().includes(q)
+      String(r.borrower_key ?? '') !== '' &&
+      (String(r.borrower_key ?? '').toLowerCase().includes(q) ||
+        String(r.issuer_name ?? '').toLowerCase().includes(q))
     // index.json is already ordered by n_bdcs desc, n_loans desc
     return expand(idx.cols, idx.rows).filter(hit).slice(0, limit) as T
   }

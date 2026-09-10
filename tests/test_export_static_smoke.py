@@ -77,6 +77,9 @@ def _same_rows(api_rows: list[dict], static_rows: list[dict], nulls_dropped: boo
 
 def test_top_level(api):
     _same_rows(api.screen(), _load("screen.json"), nulls_dropped=True)
+    st = api.strategy()
+    _same_rows(st["book"], _load("strategy.json")["book"], nulls_dropped=True)
+    _same_rows(st["periods"], _load("strategy.json")["periods"], nulls_dropped=True)
     _same_rows(api.bdcs(public_only=False), _load("bdcs.json"), nulls_dropped=True)
     pub = [b for b in _load("bdcs.json") if b.get("is_public")]
     assert len(pub) == len(api.bdcs(public_only=True))
@@ -122,7 +125,9 @@ def test_loan_detail_matches_api(api):
 def test_borrower_detail_matches_api(api):
     idx = _load("borrowers/index.json")
     index = _expand(idx["cols"], idx["rows"])
-    # search semantics: substring on key or name, index order (n_bdcs desc, n_loans desc)
+    # search semantics: substring on key or name, index order (n_bdcs desc, n_loans desc);
+    # loans whose identifier gave no borrower name (empty key) are in neither
+    assert all(r["borrower_key"] for r in index)
     q = index[0]["borrower_key"][:3]
     hits = [r for r in index if q in r["borrower_key"].lower() or q in (r.get("issuer_name") or "").lower()]
     api_hits = api.borrowers(q=q, limit=50)

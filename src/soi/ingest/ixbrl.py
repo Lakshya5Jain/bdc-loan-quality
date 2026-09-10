@@ -122,6 +122,152 @@ def parse_footnotes(path: Path, adsh: str = "") -> FilingFootnotes:
     return out
 
 
+# ---- fact extraction (filings whose bulk data misses rows) -----------------------------------------
+
+XSI_NIL = "{http://www.w3.org/2001/XMLSchema-instance}nil"
+_DASHES = str.maketrans({"\u2013": "-", "\u2014": "-", "\u2011": "-", "\u00a0": " "})
+
+
+def _norm_ident(text: str) -> str:
+    """The bulk data set writes en/em dashes as hyphens; do the same so identifiers match."""
+    return re.sub(r"\s+", " ", text.translate(_DASHES)).strip()
+
+
+def _parse_number(text: str, fmt: str, scale: str | None, sign: str | None) -> float | None:
+    t = text.strip()
+    fmt = (fmt or "").rsplit(":", 1)[-1]
+    if fmt in ("fixed-zero", "zerodash", "numdash", "fixed-empty") or t in ("", "-", "\u2014", "\u2013"):
+        return 0.0
+    if fmt == "num-comma-decimal":
+        t = t.replace(".", "").replace(" ", "").replace(",", ".")
+    else:
+        t = t.replace(",", "").replace(" ", "")
+    t = re.sub(r"[^0-9.]", "", t)
+    if not t or t == ".":
+        return None
+    try:
+        v = float(t)
+    except ValueError:
+        return None
+    if scale:
+        v *= 10 ** int(scale)
+    return -v if sign == "-" else v
+
+
+def parse_facts(path: Path, adsh: str = "", txt_tags: frozenset[str] = frozenset()) -> list[tuple]:
+    """(period_end, identifier, tag, value, uom, txt) for every fact in an identifier context:
+    numeric facts (all tags) and the text facts named in txt_tags."""
+    parser = etree.XMLParser(recover=True, huge_tree=True)
+    root = etree.parse(str(path), parser).getroot()
+    ctx_ident: dict[str, tuple[str, str]] = {}
+    for ctx in root.iter(f"{{{XBRLI_NS}}}context"):
+        inst = ctx.find(f".//{{{XBRLI_NS}}}instant")
+        end = ctx.find(f".//{{{XBRLI_NS}}}endDate")
+        pend = (inst.text if inst is not None else end.text if end is not None else "").strip()
+        for tm in ctx.iter(f"{{{XBRLDI_NS}}}typedMember"):
+            if tm.get("dimension", "").endswith(IDENT_AXIS):
+                ctx_ident[ctx.get("id")] = (pend, _norm_ident(_text(tm)))
+    units: dict[str, str] = {}
+    for u in root.iter(f"{{{XBRLI_NS}}}unit"):
+        m = u.find(f".//{{{XBRLI_NS}}}measure")
+        if m is not None and m.text:
+            units[u.get("id")] = m.text.rsplit(":", 1)[-1]
+    rows: list[tuple] = []
+    for f in root.iter(f"{{{IX_NS}}}nonFraction"):
+        key = ctx_ident.get(f.get("contextRef", ""))
+        if not key or f.get(XSI_NIL) == "true":
+            continue
+        v = _parse_number(_text(f), f.get("format", ""), f.get("scale"), f.get("sign"))
+        if v is None:
+            continue
+        tag = f.get("name", "").rsplit(":", 1)[-1]
+        rows.append((key[0], key[1], tag, v, units.get(f.get("unitRef", ""), ""), None))
+    if txt_tags:
+        for f in root.iter(f"{{{IX_NS}}}nonNumeric"):
+            tag = f.get("name", "").rsplit(":", 1)[-1]
+            if tag not in txt_tags:
+                continue
+            key = ctx_ident.get(f.get("contextRef", ""))
+            if not key or f.get(XSI_NIL) == "true":
+                continue
+            rows.append((key[0], key[1], tag, None, "", _text(f)))
+    return rows
+
+
+FACTS_DDL = """
+CREATE TABLE IF NOT EXISTS raw.ix_facts (
+    adsh VARCHAR, ddate DATE, identifier VARCHAR, tag VARCHAR, value DOUBLE, uom VARCHAR, txt VARCHAR
+);
+CREATE TABLE IF NOT EXISTS raw.ix_fact_filings (
+    adsh VARCHAR PRIMARY KEY, n_facts INTEGER, error VARCHAR, parsed_at TIMESTAMP DEFAULT now()
+);
+"""
+
+
+def gap_filings(con, lo: float = 0.5, hi: float = 0.97, public_only: bool = True) -> list[tuple]:
+    """Chosen filings whose tagged detail covers lo..hi of the reported total: candidates for
+    reading the facts from the filing itself."""
+    where = ["f.inlineurl IS NOT NULL", f"r.coverage BETWEEN {lo} AND {hi}", "r.override_note IS NULL"]
+    if public_only:
+        where.append("m.is_public")
+    return con.execute(
+        f"""
+        SELECT f.adsh, f.inlineurl, m.ticker, f.period
+        FROM core.reconciliation r JOIN core.filings f USING (adsh)
+        JOIN ref.bdc_master m ON m.cik = r.cik
+        WHERE {' AND '.join(where)}
+        GROUP BY ALL ORDER BY f.period DESC, m.ticker
+        """
+    ).fetchall()
+
+
+def build_ix_facts(con, todo: list[tuple], keep_html: bool = False, log=print, force: bool = False) -> str:
+    """Download the given filings and store every fact of their identifier contexts in raw.ix_facts."""
+    from soi.transform.holdings import TXT_TAGS
+
+    con.execute("CREATE SCHEMA IF NOT EXISTS raw")
+    con.execute(FACTS_DDL)
+    if not force:
+        done = {r[0] for r in con.execute("SELECT adsh FROM raw.ix_fact_filings WHERE error IS NULL").fetchall()}
+        todo = [t for t in todo if t[0] not in done]
+    log(f"ix facts: {len(todo)} filings to fetch")
+    client = httpx.Client(headers={"User-Agent": settings.sec_user_agent},
+                          timeout=httpx.Timeout(180.0, connect=30.0), follow_redirects=True)
+    n_done = 0
+    try:
+        for adsh, url, ticker, period in todo:
+            in_tx = False
+            try:
+                path = download(adsh, url, client)
+                rows = [(adsh, *r) for r in parse_facts(path, adsh, frozenset(TXT_TAGS))]
+                con.execute("BEGIN")
+                in_tx = True
+                con.execute("DELETE FROM raw.ix_facts WHERE adsh = ?", [adsh])
+                if rows:
+                    con.executemany(
+                        "INSERT INTO raw.ix_facts VALUES (?, try_cast(? AS DATE), ?, ?, ?, ?, ?)", rows
+                    )
+                con.execute("DELETE FROM raw.ix_fact_filings WHERE adsh = ?", [adsh])
+                con.execute("INSERT INTO raw.ix_fact_filings (adsh, n_facts, error) VALUES (?, ?, NULL)",
+                            [adsh, len(rows)])
+                con.execute("COMMIT")
+                n_done += 1
+                log(f"  {ticker or ''} {period} {adsh}: {len(rows)} facts")
+                if not keep_html:
+                    path.unlink(missing_ok=True)
+            except Exception as e:  # noqa: BLE001
+                if in_tx:
+                    con.execute("ROLLBACK")
+                con.execute("DELETE FROM raw.ix_fact_filings WHERE adsh = ?", [adsh])
+                con.execute("INSERT INTO raw.ix_fact_filings (adsh, n_facts, error) VALUES (?, 0, ?)",
+                            [adsh, str(e)[:500]])
+                log(f"  FAILED {ticker or ''} {period} {adsh}: {e}")
+    finally:
+        client.close()
+    n = con.execute("SELECT count(*), count(DISTINCT adsh) FROM raw.ix_facts").fetchone()
+    return f"raw.ix_facts: {n[0]:,} facts across {n[1]} filings ({n_done} parsed this run)"
+
+
 # ---- batch enrichment ---------------------------------------------------------------------------
 
 DDL = """

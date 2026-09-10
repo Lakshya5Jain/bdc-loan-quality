@@ -4,9 +4,10 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import DataTable, { Col } from '../components/DataTable'
 import Stat from '../components/Stat'
 import { useApi } from '../lib/api'
-import { bn, bucketLabel, cls, mm, num, pct, signed, signedPct } from '../lib/format'
+import { bn, bucketLabel, cls, mm, num, pct, signed, signedPct, titleCase } from '../lib/format'
 import type { ScreenRow } from './Screener'
 import { G } from '../lib/glossary'
+import { Explain, PageHeader, Section } from '../components/Page'
 
 type Quarter = {
   period_end: string; data_ok: boolean; coverage: number | null; n_holdings: number; n_debt: number
@@ -41,6 +42,7 @@ const BUCKETS = ['1_ge98', '2_95_98', '3_90_95', '4_80_90', '5_lt80']
 export default function BdcDetail() {
   const { cik } = useParams()
   const { data, error, loading } = useApi<Detail>(`/api/bdcs/${cik}`)
+  const strat = useApi<{ book: { cik: number; side: 'long' | 'short' | null; rank: number; n: number; health: number; pct_debt_below_90_rank: number; pct_debt_below_95_rank: number; debt_mark_rank: number; nav_chg_4q_rank: number }[] }>('/api/strategy')
   const [period, setPeriod] = useState<string>('')
   const [flag, setFlag] = useState<string>('debt')
   const [q, setQ] = useState('')
@@ -85,7 +87,6 @@ export default function BdcDetail() {
   const loanCols: Col<Loan>[] = [
     { header: 'Issuer', accessorKey: 'issuer_name', left: true, cell: (c) => <Link to={`/loans/${c.row.original.loan_id}`}>{c.getValue<string>() || c.row.original.identifier}</Link> },
     { header: 'Type', accessorKey: 'instrument_type', left: true, tip: G.first_lien, cell: (c) => `${c.getValue<string>()}${c.row.original.instrument_subtype ? ' · ' + c.row.original.instrument_subtype : ''}` },
-    { header: 'Industry', accessorKey: 'industry', left: true, cell: (c) => <span className="muted">{c.getValue<string>() ?? ''}</span> },
     { header: 'Warning signs', id: 'flags', left: true, tip: 'Non-accrual, stressed (mark below 95), marked down more than 2 points this quarter, PIK, spread up, maturity extended, converted to equity, new this quarter.', cell: (c) => {
       const l = c.row.original
       return <>
@@ -109,15 +110,22 @@ export default function BdcDetail() {
     { header: 'Quarters held', accessorKey: 'obs_n', tip: 'How many quarters we have seen this loan.' },
   ]
 
+  const st = strat.data?.book.find((b) => b.cik === data.bdc.cik)
+  const rankWord = (r: number) => r <= 0.2 ? 'among the healthiest fifth' : r <= 0.4 ? 'better than most' : r <= 0.6 ? 'about the middle' : r <= 0.8 ? 'worse than most' : 'among the sickest fifth'
   return (
     <div>
-      <h1>{data.bdc.name} {data.bdc.ticker && <span className="muted">({data.bdc.ticker})</span>}</h1>
+      <PageHeader eyebrow={data.bdc.is_public ? 'Universe · public BDC' : 'Universe · private BDC'} title={titleCase(data.bdc.name)} ticker={data.bdc.ticker} lede={summary.replace(data.bdc.name, titleCase(data.bdc.name))} />
       <div className="sub">
-        Latest period {latest.period_end} · {latest.n_holdings} holdings, {latest.n_debt} debt · reconciliation {num(latest.coverage, 2)}
-        {!latest.data_ok && <span className="warn"> · detail does not reconcile to reported total; treat metrics with care</span>}
-        {s && <> · <span className={`tag ${s.quadrant}`}>{s.quadrant.replace(/_/g, ' ')}</span></>}
+        Latest filing {latest.period_end} · {latest.n_holdings} holdings, {latest.n_debt} debt positions · data check {num(latest.coverage, 2)}
+        {!latest.data_ok && <span className="warn"> · this quarter did not reconcile to the reported total and is excluded from scores</span>}
       </div>
-      <div className="panel summary">{summary}</div>
+      {st && (
+        <Explain>
+          <p><b>Default strategy: {st.side ? <span className={`tag ${st.side}`}>{st.side}</span> : 'no position'}</b>, ranked {st.rank} of {st.n} liquid public BDCs on the health score ({num(st.health, 2)}). On the four inputs it is {rankWord(1 - st.pct_debt_below_90_rank)} for loans below 90, {rankWord(1 - st.pct_debt_below_95_rank)} for loans below 95, {rankWord(1 - st.debt_mark_rank)} on average mark, and {rankWord(1 - st.nav_chg_4q_rank)} on the year's NAV change. See <Link to="/methods">methods</Link> for how the score is built and <Link to="/results">results</Link> for how it has done.</p>
+        </Explain>
+      )}
+      {!st && data.bdc.is_public && <Explain kind="quiet"><p><b>Not in the default strategy.</b> Either the latest quarter did not pass the data check, the book has fewer than ten loans, or the stock trades less than $100,000 a day.</p></Explain>}
+      <Section title="The book in numbers" meta={`as of ${latest.period_end}`}>
       <div className="stats">
         <Stat k="Debt at cost" v={bn(latest.debt_cost)} />
         <Stat k="Debt mark (FV/cost)" v={num(latest.debt_mark, 3)} d={`Δ4q ${signedPct(s?.d4_debt_mark ?? null, 2)}`} />
@@ -127,10 +135,14 @@ export default function BdcDetail() {
         <Stat k="Newly deteriorated" v={pct(latest.new_deterioration_rate)} d="crossed below 95 this quarter" />
         <Stat k="Quality score" v={signed(latest.quality_score)} d={`trend 4q ${signed(latest.quality_trend_4q)}`} cls={cls(latest.quality_trend_4q, true)} />
         {s && <Stat k="Price / NAV" v={num(s.p_nav)} d={`$${num(s.price)} vs NAV $${num(s.nav_per_share)} (${s.nav_period})`} />}
-        {s && <Stat k="Total return 6m / 12m" v={`${signedPct(s.ret_6m)} / ${signedPct(s.ret_12m)}`} d={`div yield ${pct(s.div_yield)}`} />}
+        {s && <Stat k="Total return 6m" v={signedPct(s.ret_6m)} d={`12m ${signedPct(s.ret_12m)}`} cls={cls(s.ret_6m)} />}
+        {s && <Stat k="Dividend yield" v={pct(s.div_yield)} d="trailing 12 months / price" />}
         {s && s.generosity != null && <Stat k="Mark vs peers" v={signedPct(s.generosity, 2)} d={`${s.n_shared} shared borrowers`} cls={cls(s.generosity, true)} />}
       </div>
+      <p className="note">All shares are of the debt book at cost. "Δ4q" is the change against the same quarter a year ago. Hover any table header for a definition.</p>
+      </Section>
 
+      <Section title="How the book has moved">
       <div className="row">
         <div className="panel">
           <h2>Share of loans in trouble, by quarter (% of debt at cost)</h2>
@@ -167,6 +179,10 @@ export default function BdcDetail() {
         </div>
       </div>
 
+      </Section>
+
+      <Section title="Quarter by quarter">
+      <p className="sub">Every trusted quarter of this BDC's book. Read left to right: how big the book is, how it is marked on average, how much of it is impaired at each threshold, what is newly going wrong, and what the stock paid for it at the time.</p>
       <div className="row">
         <div className="panel">
           <h2>Quarterly metrics <span className="small muted">(hover headers for definitions)</span></h2>
@@ -231,8 +247,11 @@ export default function BdcDetail() {
         </div>
       </div>
 
+      </Section>
+
+      <Section title="Every holding" meta={`${filtered.length} rows`}>
+      <p className="sub">The loan schedule as the BDC filed it, one row per position, after subtotals and note tables were removed, largest first. Rows with no cost and a small negative fair value are unfunded commitments the BDC marks below par. Warning signs are computed here; click an issuer to follow the loan across quarters and see every other lender's mark on it.</p>
       <div className="panel">
-        <h2>Holdings</h2>
         <div className="controls">
           <select value={activePeriod} onChange={(e) => setPeriod(e.target.value)}>
             {[...data.quarters].reverse().map((qq) => <option key={qq.period_end} value={qq.period_end}>{qq.period_end}</option>)}
@@ -250,8 +269,9 @@ export default function BdcDetail() {
           <input placeholder="search issuer" value={q} onChange={(e) => setQ(e.target.value)} />
           <span className="muted">{filtered.length} rows{loans.loading ? ' · loading…' : ''}</span>
         </div>
-        <DataTable data={filtered} columns={loanCols} initialSort={[{ id: 'mark', desc: false }]} maxRows={600} />
+        <DataTable data={filtered} columns={loanCols} initialSort={[{ id: 'cost', desc: true }]} maxRows={600} />
       </div>
+      </Section>
     </div>
   )
 }

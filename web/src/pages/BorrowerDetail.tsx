@@ -1,7 +1,8 @@
 import { Link, useParams } from 'react-router-dom'
 import DataTable, { Col } from '../components/DataTable'
 import { useApi } from '../lib/api'
-import { cls, mm, num, signed } from '../lib/format'
+import { cls, mm, num, signed, titleCase } from '../lib/format'
+import { Explain, PageHeader, Section } from '../components/Page'
 
 type Loan = { loan_id: string; cik: number; ticker: string | null; bdc_name: string; issuer_name: string; instrument_type: string; is_debt: boolean; first_period: string; last_period: string; n_periods: number; last_fair_value: number | null; last_cost: number | null; last_mark: number | null; min_mark: number | null; ever_nonaccrual: boolean; ever_pik: boolean; exited: boolean; exit_type: string | null }
 type Mark = { period_end: string; cik: number; ticker: string | null; bdc_name: string; instrument_type: string; fv: number; cost: number; mark: number | null; nonaccrual: boolean; n_bdcs: number; avg_mark: number | null; mark_vs_peers: number | null }
@@ -15,6 +16,8 @@ export default function BorrowerDetail() {
   const name = data.loans[0]?.issuer_name ?? data.borrower_key
   const periods = Array.from(new Set(data.marks.map((m) => m.period_end))).sort()
   const lenders = Array.from(new Set(data.marks.map((m) => m.ticker ?? m.bdc_name)))
+  const tickers = new Set(data.marks.map((m) => m.ticker).filter(Boolean))
+  const lenderLabel = (l: string) => (tickers.has(l) ? l : titleCase(l))
   const markAt = (lender: string, p: string) => {
     const rows = data.marks.filter((m) => (m.ticker ?? m.bdc_name) === lender && m.period_end === p)
     if (!rows.length) return null
@@ -23,8 +26,8 @@ export default function BorrowerDetail() {
     return { mark: cost ? fv / cost : null, na: rows.some((r) => r.nonaccrual) }
   }
   const cols: Col<Loan>[] = [
-    { header: 'BDC', accessorKey: 'bdc_name', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.cik}`}>{c.row.original.ticker ?? c.getValue<string>()}</Link> },
-    { header: 'Instrument', accessorKey: 'instrument_type', left: true, cell: (c) => <Link to={`/loans/${c.row.original.loan_id}`}>{c.getValue<string>()}</Link> },
+    { header: 'BDC', accessorKey: 'bdc_name', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.cik}`}>{c.row.original.ticker ?? titleCase(c.getValue<string>())}</Link> },
+    { header: 'Instrument', accessorKey: 'instrument_type', left: true, cell: (c) => <Link to={`/loans/${c.row.original.loan_id}`}>{c.getValue<string>().replace(/_/g, ' ')}</Link> },
     { header: 'First', accessorKey: 'first_period', left: true },
     { header: 'Last', accessorKey: 'last_period', left: true, cell: (c) => <>{c.getValue<string>()}{c.row.original.exited && <span className="tag info">{c.row.original.exit_type}</span>}</> },
     { header: 'Qtrs', accessorKey: 'n_periods' },
@@ -37,18 +40,17 @@ export default function BorrowerDetail() {
   ]
   return (
     <div>
-      <h1>{name}</h1>
-      <div className="sub">{data.loans.length} positions across {new Set(data.loans.map((l) => l.cik)).size} BDCs · key <span className="muted">{data.borrower_key}</span></div>
+      <PageHeader eyebrow="Borrower" title={name} lede={`${data.loans.length} positions across ${new Set(data.loans.map((l) => l.cik)).size} BDCs. Each lender values its own slice of this company independently, so the table below is a check on every one of them.`} />
       {periods.length > 0 && (
+        <Section title="How each lender marks this borrower, by quarter">
+        <Explain kind="quiet"><p><b>How to read this.</b> Each cell is fair value over cost for that lender's position in the quarter. Lenders holding the same company should mark it similarly; a lender far above the others is either better informed or late. The bottom row is the gap between the highest and lowest mark. "NA" marks a position on non-accrual.</p></Explain>
         <div className="panel">
-          <h2>How each lender marks this borrower, by quarter (fair value / cost)</h2>
-          <div className="small muted">Lenders holding the same company should mark it similarly. A lender far above the others is either better informed or late; the bottom row shows the gap between the highest and lowest mark.</div>
           <div className="tablewrap">
             <table className="grid">
               <thead><tr><th className="l">Lender</th>{periods.slice(-10).map((p) => <th key={p}>{p.slice(0, 7)}</th>)}</tr></thead>
               <tbody>
                 {lenders.map((l) => (
-                  <tr key={l}><td className="l">{l}</td>
+                  <tr key={l}><td className="l">{lenderLabel(l)}</td>
                     {periods.slice(-10).map((p) => { const m = markAt(l, p); return <td key={p} className={m?.mark != null && m.mark < 0.95 ? 'neg' : ''}>{m ? `${num(m.mark, 3)}${m.na ? ' NA' : ''}` : ''}</td> })}
                   </tr>
                 ))}
@@ -59,8 +61,11 @@ export default function BorrowerDetail() {
             </table>
           </div>
         </div>
+        </Section>
       )}
-      <div className="panel"><DataTable data={data.loans} columns={cols} /></div>
+      <Section title="Every position" meta={`${data.loans.length} positions`}>
+        <div className="panel"><DataTable data={data.loans} columns={cols} initialSort={[{ id: 'last_cost', desc: true }]} /></div>
+      </Section>
     </div>
   )
 }

@@ -17,7 +17,10 @@ Note: the project directory name ends with a trailing space
 uv run soi ingest --all            # download + load all SEC BDC bulk zips
 uv run soi ingest --since 2025q3   # only files at/after that name
 uv run soi build holdings|loans|signals|screen|all
-uv run soi prices                  # yfinance for public tickers
+uv run soi prices                  # yfinance for public tickers + market.nav
+uv run soi ixfootnotes --since 2026-06-30   # footnote links from the filings (non-accrual, PIK)
+uv run soi ixfacts                 # holdings facts from the filings where bulk data misses rows
+uv run soi backtest                # walk-forward backtest of BDC-level signals on public stock returns
 uv run soi serve                   # or: uv run uvicorn api.main:app --port 8000
 npm --prefix web run dev           # http://localhost:5173
 uv run pytest                      # parser unit tests + smoke tests against data/soi.duckdb
@@ -33,8 +36,23 @@ Set `SEC_USER_AGENT="Name email"` in `.env` (SEC requires it).
 - Per-holding facts carry `InvestmentIdentifierAxis(us-gaap/YYYY)=<free text>()` in `segments`.
   Numeric tags in `num.tsv`; dates (maturity, acquisition) in `txt.tsv`.
 - Non-accrual / PIK / amendment info is in the `footnote` column of `num.tsv`.
+- ~13 public filers (HRZN, KBDC, OXSQ, PFX, PSBD, SAR, SuRo/NSLR, TPVG to 2025, PIAC, EQS, SLRC and
+  TCPC early on) tag holdings as explicit axis-member combinations (issuer member x type member x
+  industry member) with no `InvestmentIdentifierAxis`; `holdings.py` builds those rows from the
+  leaf member sets (`src = 'member'` / `'member_fill'`).
+- `num.tsv` carries facts in EUR/GBP/SEK etc. next to the USD fact (TSLX); only `uom = 'USD'` counts.
+- Reported totals may only exist as `InvestmentsFairValueDisclosure`, a `TotalInvestmentsMember`
+  fact, or the sum over an affiliation / ownership axis; `core.reconciliation.total_source` says which.
+- The bulk data set drops 8-12% of GSBD's rows every quarter since 2025 (they are in the filing's
+  inline XBRL). `soi ixfacts` reads facts from the filing for filings whose coverage is 50-97%
+  (`raw.ix_facts`); `holdings.py` uses them instead of the bulk facts when they list more holdings.
+- The bulk data writes en/em dashes as hyphens; inline-XBRL text is normalised the same way.
+- Untagged industry names sit between the category heads and the issuer for some filers (Trinity):
+  `_learn_industry_phrases` in `holdings.py` learns a phrase that precedes >= 3 issuers of one BDC.
 - Amendments (10-K/A, 10-Q/A) and 10-Q prior-year-end comparatives duplicate periods; dedupe per
-  (cik, period_end) keeping the latest `filed`.
+  (cik, period_end) preferring the filing whose detail reconciles, then the filing's own period,
+  then the latest `filed`. Prior-period dates with < 25% of the BDC's usual row count are
+  affiliate roll-forward tables and are dropped (`core.period_source`).
 - BDC master list: business-development-company-YYYY.csv; CIK→ticker: company_tickers.json.
 
 ## Layout
@@ -46,5 +64,5 @@ Set `SEC_USER_AGENT="Name email"` in `.env` (SEC requires it).
   `core.holdings_excluded`, `core.holdings_jv`, `core.reconciliation`), `core.loans` + `core.loan_history`
   (loan_id stable across quarters), `signals.loan_quarter`, `signals.bdc_quarter`, `signals.bdc_latest`,
   `signals.migration`, `signals.borrower_marks`, `signals.bdc_generosity`, `market.prices`, `market.nav`,
-  `market.screen`.
-- Only trust a BDC-period when `core.reconciliation.coverage` is 0.85-1.15 (`data_ok` in signals).
+  `market.screen`, `signals.bdc_fundamentals` (NII, coverage, leverage, NAV trend), `signals.bt_*` (backtest).
+- Only trust a BDC-period when `core.reconciliation.coverage` is 0.9-1.1 or `override_note` is set (`data_ok` in signals).

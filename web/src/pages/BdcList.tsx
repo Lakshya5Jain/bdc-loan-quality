@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import DataTable, { Col } from '../components/DataTable'
 import { useApi } from '../lib/api'
-import { bn, cls, num, pct, signed } from '../lib/format'
+import { bn, cls, num, pct, signed, titleCase } from '../lib/format'
 import { G } from '../lib/glossary'
+import { Explain, PageHeader } from '../components/Page'
 
 type Row = {
   cik: number; name: string; ticker: string | null; is_public: boolean; latest_period: string | null
@@ -17,11 +18,14 @@ export default function BdcList() {
   const [publicOnly, setPublicOnly] = useState(false)
   const [q, setQ] = useState('')
   const { data, error, loading } = useApi<Row[]>(`/api/bdcs?public_only=${publicOnly}`)
+  const strat = useApi<{ book: { cik: number; side: string | null; rank: number }[] }>('/api/strategy')
   if (error) return <div className="err">{error}</div>
   if (loading || !data) return <div className="loading">Loading…</div>
   const rows = data.filter((r) => !q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.ticker ?? '').toLowerCase().includes(q.toLowerCase()))
+  const side = new Map((strat.data?.book ?? []).map((b) => [b.cik, b]))
   const columns: Col<Row>[] = [
-    { header: 'BDC', accessorKey: 'name', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.cik}`}>{c.getValue<string>()}</Link> },
+    { header: 'BDC', accessorKey: 'name', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.cik}`}>{titleCase(c.getValue<string>())}</Link> },
+    { header: 'Strategy', id: 'strategy', accessorFn: (r) => side.get(r.cik)?.rank ?? 999, left: true, tip: G.strategy_side, cell: (c) => { const b = side.get(c.row.original.cik); return b?.side ? <span className={`tag ${b.side}`}>{b.side}</span> : <span className="muted small">{b ? `#${b.rank}` : ''}</span> } },
     { header: 'Ticker', accessorKey: 'ticker', left: true },
     { header: 'Latest', accessorKey: 'latest_period', left: true },
     { header: 'Data check', accessorKey: 'coverage', tip: G.recon, cell: (c) => <span className={c.row.original.data_ok ? '' : 'warn'}>{num(c.getValue<number>(), 2)}</span> },
@@ -35,12 +39,11 @@ export default function BdcList() {
     { header: 'Book quality', accessorKey: 'quality_score', tip: G.quality, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
     { header: 'Trend (1 yr)', accessorKey: 'quality_trend_4q', tip: G.trend, cell: (c) => <span className={cls(c.getValue<number>(), true)}>{signed(c.getValue<number>())}</span> },
     { header: 'Price / NAV', accessorKey: 'p_nav', tip: G.p_nav, cell: (c) => num(c.getValue<number>()) },
-    { header: 'Verdict', accessorKey: 'quadrant', tip: G.quadrant, left: true, cell: (c) => c.getValue<string>() ? <span className={`tag ${c.getValue<string>()}`}>{c.getValue<string>().replace(/_/g, ' ')}</span> : '' },
   ]
   return (
     <div>
-      <h1>All BDCs</h1>
-      <div className="help"><b>How to read this.</b> Every BDC in the SEC data, including private ones that do not trade (they matter because they lend to the same borrowers and give a second opinion on marks). <b>Data check</b> near 1.00 means our loan-level data matches the total the BDC reported; rows far from 1.00 are excluded from scoring.</div>
+      <PageHeader eyebrow="Universe" title="All BDCs" lede="Every BDC in the SEC data, public and private, with its latest trusted quarter. Private BDCs do not trade but lend to the same borrowers, so their marks are a second opinion on the public ones." />
+      <Explain><p><b>How to read this.</b> <b>Strategy</b> is the default strategy's current call for liquid public names (long, short, or its rank in the middle). <b>Data check</b> is our loan total divided by the total the BDC reported; near 1.00 is right, and quarters outside 0.90 to 1.10 are excluded from every score. Sort any column by clicking its header.</p></Explain>
       <div className="controls">
         <input placeholder="filter name / ticker" value={q} onChange={(e) => setQ(e.target.value)} />
         <label><input type="checkbox" checked={publicOnly} onChange={(e) => setPublicOnly(e.target.checked)} /> public only</label>

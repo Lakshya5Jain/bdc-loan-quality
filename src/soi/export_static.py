@@ -182,6 +182,9 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
     put("insights/validation.json", {"meta": _row(v["meta"]), "loan_signals": _rows(v["loan_signals"]),
                                      "bdc_backtest": _rows(v["bdc_backtest"])})
     put("insights/scorecards.json", _rows(api.scorecards()))
+    st = api.strategy()
+    put("strategy.json", {"summary": _row(st["summary"]), "periods": _rows(st["periods"]),
+                          "book": _rows(st["book"]), "signals": _rows(st["signals"])})
     sec = api.sectors()
     put("insights/sectors.json", {"latest_period": _clean(sec["latest_period"]), "sectors": _rows(sec["sectors"]),
                                   "sector_history": _rows(sec["sector_history"]), "vintages": _rows(sec["vintages"])})
@@ -256,9 +259,9 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
     # --- borrowers --------------------------------------------------------------------------
     index = db.rows(
         """
-        SELECT issuer_norm AS borrower_key, any_value(issuer_name) AS issuer_name,
+        SELECT issuer_norm AS borrower_key, mode(issuer_name) AS issuer_name,
                count(DISTINCT cik) AS n_bdcs, count(*) AS n_loans, max(last_period) AS last_period
-        FROM core.loans GROUP BY 1 ORDER BY n_bdcs DESC, n_loans DESC
+        FROM core.loans WHERE issuer_norm <> '' GROUP BY 1 ORDER BY n_bdcs DESC, n_loans DESC, borrower_key
         """
     )
     put("borrowers/index.json",

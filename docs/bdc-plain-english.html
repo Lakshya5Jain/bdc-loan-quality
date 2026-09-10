@@ -1,0 +1,317 @@
+<title>BDC Playbook in Plain English</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #fbf8f1;
+    --panel: #ffffff;
+    --panel-2: #f1ecdf;
+    --ink: #22201c;
+    --ink-2: #57524a;
+    --ink-3: #8a8377;
+    --rule: #dcd5c4;
+    --accent: #1d5c8a;
+    --accent-soft: #dce9f3;
+    --good: #2f7a4d;
+    --good-soft: #dcefe2;
+    --bad: #b3432e;
+    --bad-soft: #f6dcd6;
+    --note: #9a6b12;
+    --note-soft: #f7ebcf;
+    --code: #f1ecdf;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #1b1a17; --panel: #24221e; --panel-2: #2d2a25; --ink: #ece7dc; --ink-2: #bdb6a8; --ink-3: #8b8477;
+      --rule: #3d3931; --accent: #7fb6e0; --accent-soft: #1f3447; --good: #7fcb9a; --good-soft: #1f3a2a;
+      --bad: #e8907c; --bad-soft: #432520; --note: #e0b662; --note-soft: #3d2f14; --code: #2d2a25;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #1b1a17; --panel: #24221e; --panel-2: #2d2a25; --ink: #ece7dc; --ink-2: #bdb6a8; --ink-3: #8b8477;
+    --rule: #3d3931; --accent: #7fb6e0; --accent-soft: #1f3447; --good: #7fcb9a; --good-soft: #1f3a2a;
+    --bad: #e8907c; --bad-soft: #432520; --note: #e0b662; --note-soft: #3d2f14; --code: #2d2a25;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif; font-size: 17px; line-height: 1.6; }
+  a { color: var(--accent); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 44px 24px 96px; }
+  header { margin-bottom: 40px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 12px; color: var(--accent); font-weight: 700; }
+  h1 { font-family: "Fraunces", Georgia, serif; font-weight: 700; font-size: 44px; line-height: 1.08; margin: 10px 0 14px; text-wrap: balance; }
+  .lede { font-size: 20px; color: var(--ink-2); max-width: 60ch; margin: 0; }
+  h2 { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 30px; line-height: 1.15; margin: 56px 0 10px; text-wrap: balance; }
+  h3 { font-size: 19px; font-weight: 700; margin: 26px 0 8px; }
+  p, li { max-width: 66ch; }
+  p { margin: 0 0 14px; }
+  ul, ol { padding-left: 24px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  code { font-family: "IBM Plex Mono", monospace; font-size: .9em; background: var(--code); padding: 1px 5px; border-radius: 3px; }
+  .example { border: 1px solid var(--rule); background: var(--panel); border-radius: 8px; padding: 16px 20px; margin: 18px 0 22px; max-width: 72ch; }
+  .example .tag { font-size: 11.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
+  .example p:last-child, .example table { margin-bottom: 0; }
+  .key { border-left: 4px solid var(--note); background: var(--note-soft); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 18px 0 22px; max-width: 72ch; }
+  .key.good { border-color: var(--good); background: var(--good-soft); }
+  .key.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .key p:last-child { margin-bottom: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 10px 0 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); background: var(--panel-2); }
+  tr:last-child td { border-bottom: none; }
+  td.n, th.n { text-align: right; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+  .math { font-family: "IBM Plex Mono", monospace; background: var(--code); padding: 8px 12px; border-radius: 6px; display: inline-block; margin: 4px 0 12px; }
+  .up { color: var(--good); font-weight: 700; } .down { color: var(--bad); font-weight: 700; }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 16px 0 22px; display: grid; gap: 10px; }
+  .steps li { counter-increment: s; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px 12px 52px; position: relative; max-width: 72ch; }
+  .steps li::before { content: counter(s); position: absolute; left: 16px; top: 11px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+  .gloss dt { font-weight: 700; margin-top: 10px; } .gloss dd { margin: 0 0 4px; color: var(--ink-2); max-width: 66ch; }
+  .small { font-size: 14px; color: var(--ink-3); }
+  @media (max-width: 600px) { h1 { font-size: 34px; } h2 { font-size: 26px; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">The whole project, no jargon</div>
+  <h1>BDC Playbook in Plain English</h1>
+  <p class="lede">What these companies are, what we pull out of their reports, how we turn it into a score, how we tested whether the score predicts the stock, and what we found. Every idea comes with a made-up example you can check by hand.</p>
+</header>
+
+<h2>1. What is a BDC?</h2>
+<p>A BDC (business development company) is a company whose whole job is lending money to mid-sized private businesses: a dental chain, a software company, a trucking firm. It borrows some money itself, raises the rest by selling shares on the stock market, and lends it all out at 10 to 12% interest. Most of that interest goes back to shareholders as dividends.</p>
+<p>So a BDC is basically a bucket of loans with a stock price on it. Two numbers matter:</p>
+<ul>
+  <li><b>NAV (net asset value):</b> what the loans in the bucket are worth, minus what the BDC owes. Divide by shares and you get NAV per share. This is what the company says one share is "really" worth.</li>
+  <li><b>Stock price:</b> what people actually pay for a share today.</li>
+</ul>
+<div class="example">
+  <div class="tag">Example: Maple Lending</div>
+  <p>Maple Lending has 5 loans worth $100 million in total, owes the bank $40 million, and has 6 million shares. NAV is $60 million, so NAV per share is $10. If the stock trades at $8, it trades at 0.8 times NAV: the market thinks the loans are worth less than Maple says, or is nervous. At $12 it trades at 1.2 times NAV: the market trusts Maple a lot.</p>
+</div>
+
+<h2>2. Why there is a trade here</h2>
+<p>Every three months a BDC has to tell the public what every single loan is worth. If a loan is going bad, the BDC writes it down. When enough loans get written down, NAV falls, the dividend gets cut, and the stock drops.</p>
+<p>The idea is simple: <b>the loan list tells you about trouble before the stock price does.</b> If we read the loan list carefully and early, we can tell which BDCs are heading for a fall (sell or short them) and which are fine but cheap (buy them).</p>
+<div class="key"><p><b>One-line summary of the strategy:</b> rank all the public BDCs by how sick their loan books look, bet against the sickest, bet on the healthiest, and check every quarter whether that would have worked.</p></div>
+
+<h2>3. Where the data comes from</h2>
+<p>US law makes every BDC file a report every quarter with a table called the "schedule of investments": one line per loan, with the company's name, the type of loan, what the BDC paid for it (<b>cost</b>), and what it thinks it is worth today (<b>fair value</b>). The government publishes these tables as data files. We download all of them for all 160 BDCs going back to 2022. That is about 630,000 loan lines.</p>
+<div class="example">
+  <div class="tag">Example: three lines from a real-looking schedule</div>
+  <div class="tablewrap"><table>
+    <tr><th>Loan</th><th class="n">Cost</th><th class="n">Fair value</th></tr>
+    <tr><td>Acme Dental Group, first lien term loan, 10.5%, due 2029</td><td class="n">$20.0M</td><td class="n">$20.0M</td></tr>
+    <tr><td>Bolt Software Inc, first lien term loan, 11.0%, due 2028</td><td class="n">$15.0M</td><td class="n">$12.0M</td></tr>
+    <tr><td>Cedar Trucking LLC, second lien, 13.0%, due 2027</td><td class="n">$10.0M</td><td class="n">$4.0M</td></tr>
+  </table></div>
+</div>
+
+<h2>4. The most important number: the mark</h2>
+<p>The <b>mark</b> is fair value divided by cost. It says how much of every dollar lent the BDC expects to get back.</p>
+<div class="math">mark = fair value ÷ cost</div>
+<div class="example">
+  <div class="tag">Example, using the three loans above</div>
+  <ul>
+    <li>Acme: 20 ÷ 20 = <b>1.00</b>. Fine. Expect every dollar back.</li>
+    <li>Bolt: 12 ÷ 15 = <b>0.80</b>. Trouble. The BDC already admits it may lose 20 cents on the dollar.</li>
+    <li>Cedar: 4 ÷ 10 = <b>0.40</b>. Very bad. Most of this money is gone.</li>
+  </ul>
+</div>
+<p>We sort loans into buckets by mark: at or above 0.98 (healthy), 0.95 to 0.98 (a little worry), 0.90 to 0.95 (worry), 0.80 to 0.90 (real trouble), below 0.80 (mostly lost). Two other flags matter:</p>
+<ul>
+  <li><b>Non-accrual:</b> the borrower has stopped paying interest. The BDC says so in a footnote.</li>
+  <li><b>PIK:</b> "paid in kind". Instead of paying interest in cash, the borrower adds it to the loan balance. It is often a sign the borrower cannot afford the cash.</li>
+</ul>
+
+<h2>5. Why cleaning the data was the hard part</h2>
+<p>The government data is not a clean table. Every BDC writes its loan lines its own way, and they mix in lines that are not loans at all: subtotals, headings, totals, and tables copied from footnotes. If you add up the lines without removing those, you double count.</p>
+<div class="example">
+  <div class="tag">Example: what the raw file for Maple Lending might contain</div>
+  <div class="tablewrap"><table>
+    <tr><th>Line</th><th class="n">Fair value</th><th>What it really is</th></tr>
+    <tr><td>Software</td><td class="n">$40M</td><td>an industry heading, not a loan</td></tr>
+    <tr><td>Bolt Software Inc, first lien term loan</td><td class="n">$12M</td><td>a loan</td></tr>
+    <tr><td>Bolt Software Inc, revolver</td><td class="n">$3M</td><td>a loan</td></tr>
+    <tr><td>Total Bolt Software Inc</td><td class="n">$15M</td><td>a subtotal</td></tr>
+    <tr><td>Total investments</td><td class="n">$100M</td><td>the grand total</td></tr>
+  </table></div>
+  <p>Add everything and you get $170 million for a $100 million bucket. The pipeline has to work out which lines are real. It does that with rules ("a line whose value equals the sum of the lines under it is a subtotal") and then a check: the real lines must add up to the total the BDC printed on its balance sheet.</p>
+</div>
+<div class="key good"><p><b>How we know it is right:</b> for 822 of 843 public BDC-quarters, our loan lines add up to within 10% of the BDC's own printed total, and usually within 1%. We also opened the actual filings for every public BDC's latest quarter and checked line by line: over 99% of our fair values match the filing to the dollar.</p></div>
+
+<h2>6. Following one loan over time</h2>
+<p>A loan appears in the report every quarter. To see it getting better or worse we have to recognise it as the same loan each time, even when the BDC changes how it writes the name. We match on the exact name first, then on company plus loan type, then on company plus similar size.</p>
+<div class="example">
+  <div class="tag">Example: Bolt Software over four quarters</div>
+  <div class="tablewrap"><table>
+    <tr><th>Quarter</th><th class="n">Cost</th><th class="n">Fair value</th><th class="n">Mark</th><th>What happened</th></tr>
+    <tr><td>Sep 2025</td><td class="n">$15.0M</td><td class="n">$15.0M</td><td class="n">1.00</td><td>fine</td></tr>
+    <tr><td>Dec 2025</td><td class="n">$15.0M</td><td class="n">$14.3M</td><td class="n">0.95</td><td>first small markdown</td></tr>
+    <tr><td>Mar 2026</td><td class="n">$15.0M</td><td class="n">$12.0M</td><td class="n">0.80</td><td>big markdown, switched to PIK</td></tr>
+    <tr><td>Jun 2026</td><td class="n">$15.0M</td><td class="n">$9.0M</td><td class="n">0.60</td><td>stopped paying: non-accrual</td></tr>
+  </table></div>
+  <p>Seen quarter by quarter, the trouble was visible in December, two quarters before the loan officially went bad.</p>
+</div>
+
+<h2>7. The loan warning score</h2>
+<p>Using our own history, we asked a simple question for every loan-quarter: if a loan looked like this, how often did it go bad within the next year? "Bad" means it stopped paying, got marked below 0.80, or was sold at a loss. On average about 10% of loans go bad within a year. Each warning sign gets a weight based on how much it raises that.</p>
+<div class="tablewrap"><table>
+  <tr><th>Warning sign</th><th class="n">Went bad within a year</th><th class="n">vs average</th></tr>
+  <tr><td>Marked between 0.80 and 0.90</td><td class="n">41%</td><td class="n">4×</td></tr>
+  <tr><td>Marked down more than 5 points over two quarters</td><td class="n">33%</td><td class="n">3.3×</td></tr>
+  <tr><td>Marked down more than 5 points this quarter</td><td class="n">32%</td><td class="n">3.1×</td></tr>
+  <tr><td>Another lender has this same borrower on non-accrual</td><td class="n">21%</td><td class="n">2.1×</td></tr>
+  <tr><td>Marked between 0.90 and 0.95</td><td class="n">21%</td><td class="n">2×</td></tr>
+  <tr><td>Paying in kind (PIK)</td><td class="n">15%</td><td class="n">1.4×</td></tr>
+  <tr><td>Interest rate was raised (an amendment)</td><td class="n">10%</td><td class="n">1× (no signal)</td></tr>
+</table></div>
+<div class="example">
+  <div class="tag">Example</div>
+  <p>Bolt in March 2026 was marked 0.80 (4×) and had just been marked down more than 5 points (3×). Stacking those gives it a risk score around 70 out of 100. A loan sitting quietly at 1.00 scores about 10. The score is just "how likely is this to blow up in the next year".</p>
+</div>
+
+<h2>8. A report card for each BDC</h2>
+<p>Now add up all the loans of one BDC. Bigger loans count more (we weight by cost). The main lines of the report card:</p>
+<ul>
+  <li><b>Share below 90:</b> what fraction of the loan book is marked under 0.90. This is "how much of the book is already sick".</li>
+  <li><b>Book mark:</b> total fair value divided by total cost. The average health of the whole book.</li>
+  <li><b>New stress this quarter:</b> what fraction of the book just crossed below 0.95. "How fast is it getting worse".</li>
+  <li><b>Non-accrual share</b> and <b>PIK share.</b></li>
+  <li><b>Quality score:</b> how the BDC compares to all the others in the same quarter, on all of the above. 0 is average, positive is worse than average, negative is better.</li>
+</ul>
+<div class="example">
+  <div class="tag">Example: Maple Lending's report card</div>
+  <div class="tablewrap"><table>
+    <tr><th>Loan</th><th class="n">Cost</th><th class="n">Fair value</th><th class="n">Mark</th></tr>
+    <tr><td>Acme Dental</td><td class="n">$20M</td><td class="n">$20M</td><td class="n">1.00</td></tr>
+    <tr><td>Bolt Software</td><td class="n">$15M</td><td class="n">$12M</td><td class="n">0.80</td></tr>
+    <tr><td>Cedar Trucking</td><td class="n">$10M</td><td class="n">$4M</td><td class="n">0.40</td></tr>
+    <tr><td>Delta Clinics</td><td class="n">$30M</td><td class="n">$30M</td><td class="n">1.00</td></tr>
+    <tr><td>Echo Foods</td><td class="n">$25M</td><td class="n">$24M</td><td class="n">0.96</td></tr>
+    <tr><td><b>Whole book</b></td><td class="n"><b>$100M</b></td><td class="n"><b>$90M</b></td><td class="n"><b>0.90</b></td></tr>
+  </table></div>
+  <p><b>Share below 90:</b> Bolt and Cedar are under 0.90, and they cost $25M of the $100M book, so 25%. <b>Book mark:</b> 90 ÷ 100 = 0.90. A typical healthy BDC has 3 to 8% below 90 and a book mark near 0.97. Maple is in bad shape.</p>
+</div>
+
+<h2>9. The trick nobody else has: comparing lenders</h2>
+<p>Big loans are shared. Five different BDCs might each hold a slice of the same loan to Bolt Software. They should all mark it about the same, but they do not, because each BDC's managers decide their own marks. Because we have every BDC's list, we can line them up.</p>
+<div class="example">
+  <div class="tag">Example: the same Bolt Software loan, four lenders, same quarter</div>
+  <div class="tablewrap"><table>
+    <tr><th>Lender</th><th class="n">Mark</th></tr>
+    <tr><td>Maple Lending</td><td class="n">0.95</td></tr>
+    <tr><td>Oak Capital</td><td class="n">0.80</td></tr>
+    <tr><td>Pine Credit</td><td class="n">0.78</td></tr>
+    <tr><td>Birch Finance (private BDC)</td><td class="n">0.82</td></tr>
+  </table></div>
+  <p>Maple is 15 points above everyone else on the same loan. Either Maple knows something, or Maple is late to admit the problem. History says the second one is more common: loans a BDC marks well above its peers go bad 1.7 times more often than average. We call a BDC's average gap to its peers its <b>generosity</b>. This is also why we keep the private BDCs in the database even though we cannot trade them: they are the witnesses.</p>
+</div>
+
+<h2>10. The stock side</h2>
+<p>A sick book only makes a good short if the stock price has not noticed yet. So the last piece is price to NAV and recent returns.</p>
+<div class="example">
+  <div class="tag">Example: two BDCs with the same sick book</div>
+  <p>Maple and Oak both have 25% of their book below 0.90. Maple trades at 1.1 times NAV, Oak at 0.5 times NAV. Oak's price already screams trouble; there is little left to gain by shorting it. Maple's price says everything is fine. Maple is the short. The mirror image is the long: a clean book at 0.6 times NAV.</p>
+</div>
+
+<h2>11. The test: did it actually work?</h2>
+<p>This is the part that separates a story from a strategy. We ran the experiment the way you would have had to run it in real life:</p>
+<ol class="steps">
+  <li>Pick a date each quarter: 75 days after the quarter ends, by which time nearly every BDC has filed its report.</li>
+  <li>On that date, only use reports that were already public. No peeking at the future.</li>
+  <li>Rank all the public BDCs (about 40 to 48 of them) by each signal, best to worst.</li>
+  <li>"Buy" the best fifth and "sell" the worst fifth, hold for three months until the next date.</li>
+  <li>Measure the difference between the two groups, after removing the sector's overall move. That way a good quarter for all BDCs does not count as skill.</li>
+  <li>Repeat for 15 quarters, from December 2022 to June 2026.</li>
+</ol>
+<div class="example">
+  <div class="tag">Example: one quarter of the test</div>
+  <p>Say on 14 December 2025 we rank 47 BDCs by "share below 90". The 9 cleanest go in the buy group, the 9 sickest in the sell group. Over the next three months the whole sector fell 15%. The buy group fell about 9% and the sell group about 22%. The difference, 12 points in our favour, is the score for that quarter. It happened even though everything went down.</p>
+</div>
+
+<h2>12. What we found</h2>
+<div class="tablewrap"><table>
+  <tr><th>Signal</th><th class="n">Got the quarter right</th><th class="n">Buy group beat sell group by, per quarter</th></tr>
+  <tr><td>Share of book below 0.90</td><td class="n">13 of 15</td><td class="n up">+5.7%</td></tr>
+  <tr><td>NAV per share change over the last year</td><td class="n">11 of 12</td><td class="n up">+4.8%</td></tr>
+  <tr><td>Book mark</td><td class="n">13 of 15</td><td class="n up">+4.7%</td></tr>
+  <tr><td>All signals combined (weights learned only from past quarters)</td><td class="n">9 of 11</td><td class="n up">+5.6%</td></tr>
+  <tr><td>New stress this quarter</td><td class="n">10 of 15</td><td class="n up">+2.9%</td></tr>
+  <tr><td>Non-accrual share</td><td class="n">8 of 15</td><td class="n down">−3.1%</td></tr>
+  <tr><td>Price to NAV</td><td class="n">9 of 15</td><td class="n">about 0</td></tr>
+  <tr><td>Recent stock momentum</td><td class="n">9 of 15</td><td class="n">about 0</td></tr>
+  <tr><td>Generosity (marking above peers)</td><td class="n">6 of 15</td><td class="n">about 0</td></tr>
+</table></div>
+<h3>Then we tried trading on the day each report comes out</h3>
+<p>Waiting 75 days means sitting on information for weeks. So we re-ran the test entering each BDC the day after its own report lands and holding until its next report, about three months. Same rule, faster.</p>
+<div class="tablewrap"><table>
+  <tr><th>Signal, filing-day version</th><th class="n">Got the quarter right</th><th class="n">Healthy beat sick by, per hold</th></tr>
+  <tr><td>Share of book below 0.90</td><td class="n">15 of 15</td><td class="n up">+3.8%</td></tr>
+  <tr><td>Share of book below 0.95</td><td class="n">15 of 15</td><td class="n up">+3.5%</td></tr>
+  <tr><td>Book mark</td><td class="n">14 of 15</td><td class="n up">+3.0%</td></tr>
+  <tr><td>NAV per share change over the last year</td><td class="n">11 of 12</td><td class="n up">+5.8%</td></tr>
+  <tr><td><b>All four combined (the default strategy)</b></td><td class="n"><b>14 of 15</b></td><td class="n up"><b>+4.7%</b></td></tr>
+  <tr><td>Non-accrual share</td><td class="n">6 of 15</td><td class="n down">−1.5%</td></tr>
+</table></div>
+<p class="small">These figures leave out stocks that barely trade (under $100,000 a day), because you could not actually buy or sell them at the quoted price. Including them made the numbers look better, which is exactly why they are out.</p>
+<div class="key good">
+  <p><b>The big finding:</b> how sick the book already is (share below 0.90, book mark) and which way NAV has been moving are what predict the next quarter. About 4 to 5 points per quarter between the healthy and sick groups on tradable names, which is roughly 15 to 18% a year before the cost of borrowing stock to short.</p>
+</div>
+<h3>The default strategy, in one paragraph</h3>
+<p>Every time a BDC reports: rank it against the others on four things (share below 0.90, share below 0.95, book mark, and NAV change over the last year), average the four ranks into one health score, buy the healthiest fifth, short the sickest fifth, equal dollars each, and hold until each one's next report. We tried forty variations of this; all of them worked, and this is the sturdiest, not the flashiest.</p>
+<h3>What we double-checked</h3>
+<ul>
+  <li>Stock prices: five names on five dates match Nasdaq's own data to the cent.</li>
+  <li>Dividends: counts and totals match what the companies actually paid.</li>
+  <li>NAV per share matches net assets divided by shares for every name.</li>
+  <li>The BDC scores were recomputed by hand from the loan table and match.</li>
+  <li>One quarter of the backtest was rebuilt from scratch with separate code and gave the same answer.</li>
+</ul>
+<div class="key bad">
+  <p><b>The surprise:</b> the "official" warning sign everybody quotes, non-accruals, predicts nothing at the stock level. Neither does price to NAV on its own, nor momentum, nor generosity. Generosity works loan by loan (section 9) but not yet as a stock signal; that needs more work.</p>
+</div>
+
+<h2>13. Where the model stands today</h2>
+<p>Using the June 2026 reports, the combined score says:</p>
+<div class="tablewrap"><table>
+  <tr><th>Expected to do better than the sector</th><th>Expected to do worse</th></tr>
+  <tr><td>Hercules (HTGC), Chicago Atlantic (LIEN), WhiteHorse (WHF), Stellus (SCM), Main Street (MAIN), Trinity (TRIN), Kayne Anderson (KBDC)</td><td>BCP Investment (BCIC), OFS Capital (OFS), Oxford Square (OXSQ), BlackRock TCP (TCPC), Palmer Square (PSBD), TriplePoint (TPVG), Prospect (PSEC)</td></tr>
+</table></div>
+<p class="small">The full ranking of all 48 names, with the reasons for each, is in the database table <code>signals.bt_latest</code> and in the detailed signal book.</p>
+
+<h2>14. What could still be wrong</h2>
+<ul>
+  <li><b>Short history.</b> Fifteen quarters is one credit cycle. A signal that worked in 2023 to 2026 might not work in a different kind of market.</li>
+  <li><b>Small groups.</b> With 45 BDCs, the "worst fifth" is nine stocks. One blow-up can swing a quarter.</li>
+  <li><b>Missing losers.</b> BDCs that were bought out or delisted since 2022 are not in the test. They were often the weak ones, so the sell side looks a bit better than it should. Their price history is not available for free, so this needs a paid data feed.</li>
+  <li><b>Timing, now tested.</b> Acting the day each report lands works better than waiting 75 days, and it is more consistent (15 of 15 quarters on the main signal).</li>
+  <li><b>Costs.</b> We charged 0.4% per trade. Borrowing small BDC stocks to short can cost more than that.</li>
+  <li><b>Data holes.</b> About fifteen BDCs do not report loan due dates at all, and non-accrual is only reported when the BDC chooses to footnote it.</li>
+</ul>
+
+<h2>15. What happens next</h2>
+<ol>
+  <li>Put the tested score on the website instead of the earlier hand-made labels, which the test showed were partly wrong (they had Goldman Sachs BDC as a short; the test says it is average).</li>
+  <li>Add the BDCs that disappeared since 2022 so the test is fair.</li>
+  <li>Build the combined score in the filing-day version and produce a month-by-month equity curve with real trading costs.</li>
+  <li>Turn the lender comparison into a stock signal that fires when peers mark a BDC's loans down before it does.</li>
+  <li>Re-run the whole test after every change. If a change does not improve the test, it does not go in.</li>
+</ol>
+
+<h2>Glossary</h2>
+<dl class="gloss">
+  <dt>BDC</dt><dd>A publicly traded company that lends to mid-sized private businesses and pays most of the interest out as dividends.</dd>
+  <dt>NAV</dt><dd>Net asset value: what the loans are worth minus what the BDC owes. Per share, it is the company's own estimate of what a share is worth.</dd>
+  <dt>Price to NAV</dt><dd>Stock price divided by NAV per share. Below 1 the market is skeptical; above 1 it is trusting.</dd>
+  <dt>Cost</dt><dd>What the BDC paid for a loan.</dd>
+  <dt>Fair value</dt><dd>What the BDC says the loan is worth now.</dd>
+  <dt>Mark</dt><dd>Fair value divided by cost. 1.00 is healthy; 0.80 means 20 cents on the dollar expected lost.</dd>
+  <dt>Non-accrual</dt><dd>The borrower stopped paying interest.</dd>
+  <dt>PIK</dt><dd>Paid in kind: interest added to the loan instead of paid in cash. Often a warning sign.</dd>
+  <dt>First lien / second lien</dt><dd>Who gets paid first if the borrower fails. First lien is safer.</dd>
+  <dt>Share below 90</dt><dd>Fraction of a BDC's loan book marked under 0.90. Our strongest signal.</dd>
+  <dt>Generosity</dt><dd>How much higher a BDC marks its shared loans than the other lenders holding the same loans.</dd>
+  <dt>Backtest</dt><dd>Replaying history to see whether a rule would have made money, using only information available at the time.</dd>
+  <dt>Walk-forward</dt><dd>A backtest where the rule's settings are re-learned each period from the past only, so it never sees its own future.</dd>
+  <dt>Long / short</dt><dd>Long means you own the stock and profit if it rises. Short means you borrow and sell it, profiting if it falls.</dd>
+</dl>
+</div>

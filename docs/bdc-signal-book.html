@@ -1,0 +1,498 @@
+<title>BDC Loan Signal Book</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f6f7f4;
+    --panel: #ffffff;
+    --panel-2: #eef1ec;
+    --ink: #1c2126;
+    --ink-2: #4c5761;
+    --ink-3: #7a858f;
+    --rule: #d6dbd4;
+    --accent: #0f5f63;
+    --accent-soft: #d9ebea;
+    --short: #a83a2c;
+    --short-soft: #f3ddd8;
+    --long: #2b7a4b;
+    --long-soft: #dcecdf;
+    --warn: #a2711a;
+    --warn-soft: #f4e7cd;
+    --code: #eef1ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #15191c;
+      --panel: #1d2226;
+      --panel-2: #242a2f;
+      --ink: #e6e9e4;
+      --ink-2: #b1b9b3;
+      --ink-3: #7f8a86;
+      --rule: #333b40;
+      --accent: #5cb8b6;
+      --accent-soft: #1d3a3b;
+      --short: #e08375;
+      --short-soft: #3c2622;
+      --long: #7dc394;
+      --long-soft: #1f3327;
+      --warn: #d9ac5a;
+      --warn-soft: #3a2f1a;
+      --code: #242a2f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #15191c;
+    --panel: #1d2226;
+    --panel-2: #242a2f;
+    --ink: #e6e9e4;
+    --ink-2: #b1b9b3;
+    --ink-3: #7f8a86;
+    --rule: #333b40;
+    --accent: #5cb8b6;
+    --accent-soft: #1d3a3b;
+    --short: #e08375;
+    --short-soft: #3c2622;
+    --long: #7dc394;
+    --long-soft: #1f3327;
+    --warn: #d9ac5a;
+    --warn-soft: #3a2f1a;
+    --code: #242a2f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px; line-height: 1.55;
+  }
+  a { color: var(--accent); }
+  .page { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; max-width: 1180px; margin: 0 auto; padding: 40px 28px 96px; }
+  nav.toc { position: sticky; top: 24px; align-self: start; font-size: 13px; }
+  nav.toc .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; color: var(--ink-3); margin-bottom: 10px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  nav.toc a { color: var(--ink-2); text-decoration: none; display: flex; gap: 8px; }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); }
+  nav.toc .n { font-family: "IBM Plex Mono", monospace; color: var(--ink-3); width: 1.6em; }
+  main { min-width: 0; }
+  header.masthead { border-bottom: 2px solid var(--ink); padding-bottom: 20px; margin-bottom: 36px; }
+  header .eyebrow { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; color: var(--accent); font-weight: 600; }
+  h1 { font-family: "Source Serif 4", Georgia, serif; font-weight: 600; font-size: 40px; line-height: 1.1; margin: 8px 0 12px; text-wrap: balance; }
+  header p.lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 18px; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-3); }
+  .meta b { color: var(--ink); font-weight: 500; }
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  h2 { font-family: "Source Serif 4", Georgia, serif; font-weight: 600; font-size: 27px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; display: flex; gap: 14px; align-items: baseline; }
+  h2 .n { font-family: "IBM Plex Mono", monospace; font-size: 14px; color: var(--accent); font-weight: 500; }
+  h3 { font-size: 17px; font-weight: 600; margin: 28px 0 8px; }
+  p, li { max-width: 68ch; }
+  p { margin: 0 0 14px; }
+  ul, ol { padding-left: 22px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  code { font-family: "IBM Plex Mono", monospace; font-size: .88em; background: var(--code); padding: 1px 5px; border-radius: 3px; }
+  .stage { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-3); margin-bottom: 18px; }
+  .stage b { color: var(--ink-2); font-weight: 500; }
+  .tablewrap { overflow-x: auto; margin: 16px 0 22px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-weight: 600; background: var(--panel-2); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.k { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; white-space: nowrap; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+  .pill.short { background: var(--short-soft); color: var(--short); }
+  .pill.long { background: var(--long-soft); color: var(--long); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.neutral { background: var(--panel-2); color: var(--ink-2); }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; margin: 18px 0 22px; max-width: 72ch; border-radius: 0 4px 4px 0; }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout p:last-child { margin-bottom: 0; }
+  .formula { font-family: "IBM Plex Mono", monospace; font-size: 13.5px; background: var(--code); padding: 10px 14px; border-radius: 4px; margin: 10px 0 16px; overflow-x: auto; white-space: pre; max-width: 100%; }
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 18px 0 24px; }
+  .flow .step { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; font-size: 13px; }
+  .flow .step .t { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--accent); margin-bottom: 4px; }
+  .flow .step .d { color: var(--ink-2); }
+  .defs { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 12px 0 18px; font-size: 14.5px; max-width: 78ch; }
+  .defs dt { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--accent); }
+  .defs dd { margin: 0; color: var(--ink-2); }
+  .small { font-size: 13px; color: var(--ink-3); }
+  .bar { display: inline-block; height: 9px; background: var(--accent); border-radius: 2px; vertical-align: middle; }
+  .bar.neg { background: var(--short); }
+  @media (max-width: 860px) { .page { grid-template-columns: 1fr; gap: 24px; } nav.toc { position: static; } h1 { font-size: 32px; } }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="page">
+<nav class="toc" aria-label="Sections">
+  <div class="eyebrow">Contents</div>
+  <ol>
+    <li><a href="#s1"><span class="n">1</span>What the system is</a></li>
+    <li><a href="#s2"><span class="n">2</span>Source data and trust gate</a></li>
+    <li><a href="#s3"><span class="n">3</span>From filings to loans</a></li>
+    <li><a href="#s4"><span class="n">4</span>Loan-level signals</a></li>
+    <li><a href="#s5"><span class="n">5</span>Loan risk score</a></li>
+    <li><a href="#s6"><span class="n">6</span>BDC-level metrics</a></li>
+    <li><a href="#s7"><span class="n">7</span>Cross-lender marks</a></li>
+    <li><a href="#s8"><span class="n">8</span>Market overlay and screen</a></li>
+    <li><a href="#s9"><span class="n">9</span>Income and balance sheet</a></li>
+    <li><a href="#s9b"><span class="n">9b</span>The return backtest</a></li>
+    <li><a href="#s10"><span class="n">10</span>How to read the numbers</a></li>
+    <li><a href="#s11"><span class="n">11</span>Today's board</a></li>
+    <li><a href="#s12"><span class="n">12</span>Weak points to fix next</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="masthead">
+  <div class="eyebrow">Public BDC loan-quality tracker</div>
+  <h1>BDC Loan Signal Book</h1>
+  <p class="lede">How every number on the screen is built, from the SEC filing to the long and short lists, and what each one does and does not tell you. Written for review: every threshold here is the one in the code today.</p>
+  <div class="meta">
+    <span>Data through <b>30 Jun 2026</b> filings</span>
+    <span>Prices through <b>9 Sep 2026</b></span>
+    <span>Public BDCs screened <b>48 of 54</b></span>
+    <span>Loan-quarters in the model <b>317,683</b></span>
+    <span>Backtest <b>15 quarters, Dec 2022 to Jun 2026</b></span>
+  </div>
+</header>
+
+<section id="s1">
+  <h2><span class="n">1</span>What the system is</h2>
+  <p>Every quarter each business development company (BDC) publishes its full schedule of investments: every loan it holds, what it paid for it (cost), what it says it is worth today (fair value), the rate, and whether it is still paying. The SEC forces this into machine-readable XBRL. We read all of it, for all 160 BDCs, every quarter since late 2022, and turn it into one table with one row per loan per quarter.</p>
+  <p>The trading idea is simple. A BDC's stock trades on its net asset value (NAV), and its NAV is the sum of these loan marks. Marks move loan by loan before NAV moves, and NAV moves before the market fully reprices the stock. Because many loans are held by several BDCs at once, we can also see which BDC is marking a shared loan more generously than its peers, which is a forward look at write-downs that have not happened yet.</p>
+  <div class="flow">
+    <div class="step"><div class="t">01 ingest</div><div class="d">SEC bulk XBRL files, monthly</div></div>
+    <div class="step"><div class="t">02 holdings</div><div class="d">one row per holding per quarter, subtotals and note tables removed, reconciled to the reported total</div></div>
+    <div class="step"><div class="t">03 loans</div><div class="d">the same loan linked across quarters into one loan id</div></div>
+    <div class="step"><div class="t">04 loan signals</div><div class="d">mark, mark change, non-accrual, PIK, amendments, peer comparison, risk score</div></div>
+    <div class="step"><div class="t">05 BDC signals</div><div class="d">book-level shares and trends, peer z-scores, quality score</div></div>
+    <div class="step"><div class="t">06 market</div><div class="d">price, NAV, price/NAV, returns, screen quadrants, long and short lists</div></div>
+  </div>
+  <p>Only the public BDCs are traded, but the whole universe is kept because the private ones hold the same loans and their marks are evidence.</p>
+</section>
+
+<section id="s2">
+  <h2><span class="n">2</span>Source data and the trust gate</h2>
+  <div class="stage">Tables: <b>raw.num, raw.txt</b> → <b>core.reconciliation</b></div>
+  <p>Each filing's facts arrive as tagged numbers with a free-text identifier per holding, for example <code>Icefall Parent, Inc. | First lien senior secured loan</code>. There is no loan ID, no standard format, and filers tag subtotals, headings and note tables with the same tag as loans. A dozen public filers use a different scheme altogether, where a holding is a combination of axis members instead of a text identifier. Horizon, Kayne Anderson, Oxford Square, Palmer Square, Saratoga and TriplePoint are in that group.</p>
+  <h3>The trust gate</h3>
+  <p>For every BDC-quarter we sum the fair value of the rows we kept and divide by the total investments figure the BDC printed on its balance sheet. That ratio is <code>coverage</code>.</p>
+  <div class="formula">coverage = Σ fair_value(kept rows) / reported total investments at fair value
+data_ok  = coverage between 0.90 and 1.10, or a documented override</div>
+  <p>Nothing downstream uses a quarter that fails the gate. Today 822 of 843 public BDC-quarters pass; for the June 2026 quarter, 48 of 48 screened names pass, and 40 of them sit within 2%.</p>
+  <p>The June 2026 quarter was also checked row by row against each filing's own inline XBRL: over 99% of holdings carry the exact fair value shown in the filing. The database is faithful to the filings. Where it is thin, it is because the filer tagged less.</p>
+  <div class="callout warn">
+    <p><b>Known source gaps.</b> Maturity dates are absent for about fifteen BDCs, including Ares and Blue Owl, because they do not tag them. Non-accrual status comes from footnotes and only exists where the filer attached one, so non-accrual counts are a floor. Goldman Sachs BDC's bulk data drops 8-12% of its rows each quarter; those are read from the filing itself.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="n">3</span>From filings to loans</h2>
+  <div class="stage">Tables: <b>core.holdings</b> → <b>core.loans</b>, <b>core.loan_history</b></div>
+  <p>Each identifier is parsed into an issuer name (normalised to a <code>borrower_key</code>), an instrument type, and whether it is debt. Instrument types are <code>first_lien</code>, <code>second_lien</code>, <code>subordinated</code>, <code>structured</code> (CLO, JV, fund), <code>preferred</code>, <code>equity</code>, <code>warrant</code>, plus <code>debt_other</code> and <code>equity_other</code> when only the tagged facts (principal and rate, or shares) say which side it is.</p>
+  <p>Holdings are then linked quarter to quarter within a BDC into a stable <code>loan_id</code>, in this order, each stage only on rows the previous one left unmatched:</p>
+  <ol>
+    <li>Identical identifier text.</li>
+    <li>Identifier with percentages and whitespace normalised (Goldman rewrites its percent-of-net-assets every quarter).</li>
+    <li>Same issuer, instrument type, subtype and maturity, unique on both sides.</li>
+    <li>Same issuer and instrument type, unique on both sides.</li>
+    <li>Same issuer and debt/equity class, unique on both sides (catches filers that add "First Lien Debt" to their wording).</li>
+    <li>Same issuer and class with several tranches on both sides: paired by closest cost, within 35%.</li>
+    <li>Fuzzy issuer name (token-set ratio at least 92) with a unique instrument type.</li>
+  </ol>
+  <p>Unmatched rows start a new loan. A loan that disappears is an exit: <code>loss</code> if its last mark was below 90, otherwise <code>repaid_or_sold</code>. Across the public universe 84% of holdings in a trusted quarter continue a loan from the previous trusted quarter.</p>
+  <div class="callout"><p><b>Interpretation.</b> New-loan and exit statistics are only as good as linking. A quarter where a filer changed its wording will show inflated "new" and "exited" counts. Check <code>match_method</code> before trusting turnover for a single name.</p></div>
+</section>
+
+<section id="s4">
+  <h2><span class="n">4</span>Loan-level signals</h2>
+  <div class="stage">Table: <b>signals.loan_quarter</b>, one row per loan per quarter</div>
+  <dl class="defs">
+    <dt>mark</dt><dd>fair value / cost. 1.00 means carried at what was paid. Buckets: ≥98, 95-98, 90-95, 80-90, below 80.</dd>
+    <dt>mark_chg</dt><dd>mark this quarter minus mark last quarter, on the same loan.</dd>
+    <dt>crossed_below_95 / 90</dt><dd>the mark fell through the threshold this quarter.</dd>
+    <dt>nonaccrual_flag</dt><dd>a footnote on this holding says it is on non-accrual, or the identifier says so.</dd>
+    <dt>new_nonaccrual</dt><dd>flagged this quarter, not last quarter.</dd>
+    <dt>pik_flag / new_pik</dt><dd>a PIK rate above zero is tagged, or the text names a non-zero PIK rate.</dd>
+    <dt>spread_up</dt><dd>tagged spread rose by more than 1 bp quarter over quarter: an amendment, usually a paid-for waiver.</dd>
+    <dt>maturity_extended</dt><dd>tagged maturity moved out by more than 45 days: an extension.</dd>
+    <dt>converted_to_equity</dt><dd>a debt loan became an equity or preferred position: a restructuring.</dd>
+    <dt>is_stressed</dt><dd>debt with a mark below 95.</dd>
+  </dl>
+  <p>Only <code>is_debt</code> rows feed the credit metrics. Equity marks move for different reasons and are excluded from every "share of debt" figure.</p>
+</section>
+
+<section id="s5">
+  <h2><span class="n">5</span>Loan risk score</h2>
+  <div class="stage">Tables: <b>signals.loan_features</b>, <b>signals.signal_validation</b>, <b>signals.loan_risk</b></div>
+  <p>The score answers one question per loan: how likely is this loan to go bad within the next four quarters? "Bad" means it goes on non-accrual, is marked below 80, or exits at a loss. Loans that are already bad are excluded, and quarters whose four-quarter window has not fully elapsed are left unlabelled rather than assumed good.</p>
+  <p>Each binary feature gets a weight from our own history: the log of how much more often loans carrying it went bad than loans in general, capped at 3. The base rate today is 10.2% over 317,683 loan-quarters. The score is a logistic combination of the weights, shown 0-100.</p>
+  <div class="formula">weight(f) = clamp(ln( P(bad | f) / P(bad) ), 0, 3)      if at least 30 loan-quarters carry f
+score     = 100 · sigmoid( logit(base_rate) + Σ weight(f) )</div>
+  <div class="tablewrap"><table>
+    <tr><th>Feature</th><th>Meaning</th><th class="num">Loan-qtrs</th><th class="num">Went bad</th><th class="num">Lift</th><th class="num">Weight</th></tr>
+    <tr><td class="k">mark_80_90</td><td>marked 80 to 90</td><td class="num">13,685</td><td class="num">40.8%</td><td class="num">4.0×</td><td class="num">1.39</td></tr>
+    <tr><td class="k">drop_2q_gt5</td><td>down more than 5 points over two quarters</td><td class="num">12,825</td><td class="num">33.2%</td><td class="num">3.3×</td><td class="num">1.18</td></tr>
+    <tr><td class="k">drop_1q_gt5</td><td>down more than 5 points this quarter</td><td class="num">12,495</td><td class="num">31.5%</td><td class="num">3.1×</td><td class="num">1.13</td></tr>
+    <tr><td class="k">peer_nonaccrual</td><td>another lender has this borrower on non-accrual</td><td class="num">4,762</td><td class="num">21.2%</td><td class="num">2.1×</td><td class="num">0.73</td></tr>
+    <tr><td class="k">mark_90_95</td><td>marked 90 to 95</td><td class="num">16,136</td><td class="num">20.5%</td><td class="num">2.0×</td><td class="num">0.70</td></tr>
+    <tr><td class="k">drop_1q_2_5</td><td>down 2 to 5 points this quarter</td><td class="num">12,163</td><td class="num">20.4%</td><td class="num">2.0×</td><td class="num">0.69</td></tr>
+    <tr><td class="k">peer_min_lt_90</td><td>another lender marks it below 90 while this one is ≥95</td><td class="num">3,623</td><td class="num">17.5%</td><td class="num">1.7×</td><td class="num">0.54</td></tr>
+    <tr><td class="k">marked_above_peers</td><td>marked more than 3 pts above other lenders</td><td class="num">7,334</td><td class="num">16.9%</td><td class="num">1.7×</td><td class="num">0.51</td></tr>
+    <tr><td class="k">pik</td><td>paying in kind</td><td class="num">28,092</td><td class="num">14.5%</td><td class="num">1.4×</td><td class="num">0.35</td></tr>
+    <tr><td class="k">new_pik</td><td>switched to PIK this quarter</td><td class="num">9,451</td><td class="num">12.7%</td><td class="num">1.2×</td><td class="num">0.22</td></tr>
+    <tr><td class="k">extended</td><td>maturity extended</td><td class="num">3,547</td><td class="num">12.2%</td><td class="num">1.2×</td><td class="num">0.18</td></tr>
+    <tr><td class="k">spread_up</td><td>spread increased</td><td class="num">15,141</td><td class="num">10.2%</td><td class="num">1.0×</td><td class="num">0</td></tr>
+    <tr><td class="k">mark_95_98</td><td>marked 95 to 98</td><td class="num">24,687</td><td class="num">9.4%</td><td class="num">0.9×</td><td class="num">0</td></tr>
+  </table></div>
+  <p class="small">Non-accrual and "marked below 80" have no weight because a loan that already carries them is by definition already bad and is excluded from the prediction set.</p>
+  <div class="callout"><p><b>Interpretation.</b> The strongest predictor of a future loss is a mark that is already between 80 and 90: four in ten of those go on non-accrual or below 80 within a year. A 5-point markdown in one quarter, even from par, triples the odds. Peer signals matter: when another lender has the borrower on non-accrual, the loan this BDC still shows as performing goes bad twice as often as average. Spread increases carry no information on their own.</p></div>
+</section>
+
+<section id="s6">
+  <h2><span class="n">6</span>BDC-level metrics</h2>
+  <div class="stage">Tables: <b>signals.bdc_quarter</b>, <b>signals.bdc_latest</b></div>
+  <p>All loan rows of a BDC-quarter are rolled up. Everything is cost-weighted, so a large loan counts more than a small one, and "share" means share of the debt book at cost.</p>
+  <dl class="defs">
+    <dt>debt_mark</dt><dd>total debt fair value / total debt cost. The average mark of the book.</dd>
+    <dt>pct_debt_below_95 / 90 / 80</dt><dd>share of debt cost carried below that mark. The level of stress.</dd>
+    <dt>nonaccrual_pct_cost / _fv</dt><dd>share of the book on non-accrual, at cost and at fair value. A floor, see section 2.</dd>
+    <dt>pik_share</dt><dd>share of debt cost paying in kind.</dd>
+    <dt>new_deterioration_rate</dt><dd>share of debt cost that crossed below 95 this quarter. The flow of new stress.</dd>
+    <dt>new_nonaccrual_rate</dt><dd>share of debt cost placed on non-accrual this quarter.</dd>
+    <dt>markdown_share / markup_share</dt><dd>share of debt cost marked down or up by more than 2 points this quarter.</dd>
+    <dt>spread_up_share, extended_share, converted_share</dt><dd>share of debt cost amended, extended, or restructured into equity this quarter.</dd>
+    <dt>exit_loss_rate</dt><dd>cost of loans that left the book below 90 this quarter, over debt cost. Realised losses.</dd>
+    <dt>wavg_spread, wavg_rate</dt><dd>cost-weighted spread and all-in rate. Higher yield is higher risk taken.</dd>
+    <dt>d1_*, d4_*</dt><dd>change in a metric versus one and four quarters ago.</dd>
+  </dl>
+  <h3>Quality score</h3>
+  <p>Each of nine components is turned into a z-score against every trusted BDC in the same calendar quarter, clipped to ±3, and averaged. The components are the share below 90, non-accrual share, PIK share, new deterioration rate, new non-accrual rate, and the four-quarter changes in share below 90, non-accrual share and PIK share, plus the four-quarter change in the book's mark. Higher means worse than peers. A BDC needs a trusted quarter, at least 10 loans and at least 3 components to get a score.</p>
+  <div class="formula">quality_score      = mean over components c of clip( (x_c − mean_c) / sd_c , −3, 3 )
+quality_trend_4q   = quality_score − quality_score four quarters ago</div>
+  <div class="callout"><p><b>Interpretation.</b> A score near 0 is an average book. +0.5 is clearly worse than peers, −0.5 clearly better. The trend matters more than the level: a book going from −0.3 to +0.3 over four quarters is a book that is deteriorating faster than the sector, whatever its starting point.</p></div>
+</section>
+
+<section id="s7">
+  <h2><span class="n">7</span>Cross-lender marks</h2>
+  <div class="stage">Tables: <b>signals.borrower_marks</b>, <b>signals.bdc_generosity</b>, <b>signals.lender_scorecard</b></div>
+  <p>As of June 2026, 3,986 borrowers appear in the books of two or more BDCs. For each such borrower, per instrument type, we compute every lender's mark and compare each one with the average of the others.</p>
+  <div class="formula">mark_vs_peers = my mark − average mark of the other lenders on the same borrower and instrument
+generosity    = cost-weighted mean of mark_vs_peers over a BDC's shared loans</div>
+  <p>The scorecard adds three hindsight measures per BDC, on loans whose four-quarter window has closed:</p>
+  <dl class="defs">
+    <dt>bad_rate</dt><dd>share of its loan-quarters that went bad within a year. Underwriting quality.</dd>
+    <dt>late_mark_rate</dt><dd>of loans it carried at 97 or above, the share that went bad within a year anyway. Marks that did not warn.</dd>
+    <dt>early_warning_rate</dt><dd>of loans it put on non-accrual, the share already marked below 95 the quarter before. Honest marking.</dd>
+    <dt>loss_exit_rate</dt><dd>cost of loans exited below 90, over average debt cost.</dd>
+  </dl>
+  <div class="tablewrap"><table>
+    <tr><th>BDC</th><th class="num">Loan-qtrs judged</th><th class="num">Went bad</th><th class="num">Late marks</th><th class="num">Early warning</th><th class="num">Generosity, 4q</th></tr>
+    <tr><td>OXSQ</td><td class="num">285</td><td class="num">27.0%</td><td class="num">13.0%</td><td class="num">50%</td><td class="num">−1.2 pts</td></tr>
+    <tr><td>OFS</td><td class="num">969</td><td class="num">22.0%</td><td class="num">11.1%</td><td class="num">59%</td><td class="num">+0.5</td></tr>
+    <tr><td>FRBP</td><td class="num">2,226</td><td class="num">19.9%</td><td class="num">17.5%</td><td class="num">40%</td><td class="num">+0.1</td></tr>
+    <tr><td>PSEC</td><td class="num">1,823</td><td class="num">15.9%</td><td class="num">4.7%</td><td class="num">41%</td><td class="num">+1.2</td></tr>
+    <tr><td>MSDL</td><td class="num">4,429</td><td class="num">15.2%</td><td class="num">12.9%</td><td class="num">47%</td><td class="num">−1.0</td></tr>
+    <tr><td>BCIC</td><td class="num">1,502</td><td class="num">14.5%</td><td class="num">8.1%</td><td class="num">36%</td><td class="num">+2.0</td></tr>
+    <tr><td>GSBD</td><td class="num">3,859</td><td class="num">13.6%</td><td class="num">11.5%</td><td class="num">44%</td><td class="num">−4.4</td></tr>
+    <tr><td>OCSL</td><td class="num">2,655</td><td class="num">12.8%</td><td class="num">8.8%</td><td class="num">36%</td><td class="num">+0.1</td></tr>
+  </table></div>
+  <div class="callout"><p><b>Interpretation.</b> Generosity above +2 points with a high late-mark rate is the profile of a BDC whose NAV overstates its book. A negative generosity (GSBD at −4.4) means it marks shared loans harder than its peers, which is a reason to trust its NAV more, not less. Read generosity together with <code>n_shared</code>: a figure built on fewer than 40 shared loans is noise.</p></div>
+</section>
+
+<section id="s8">
+  <h2><span class="n">8</span>Market overlay and the screen</h2>
+  <div class="stage">Tables: <b>market.prices, market.nav, market.pnav_history</b> → <b>market.screen</b>, <b>signals.watchlist_stocks</b></div>
+  <p>Prices and dividends come from Yahoo Finance daily; NAV per share is the tagged balance-sheet figure from each filing. The screen joins the latest trusted quarter of each public BDC with:</p>
+  <dl class="defs">
+    <dt>p_nav</dt><dd>last close / latest NAV per share. The market's view of the book.</dd>
+    <dt>p_nav_pct, quality_pct, trend_pct, ret_6m_pct</dt><dd>percentile rank of each within the screened set, 0 to 1.</dd>
+    <dt>ret_3m / 6m / 12m</dt><dd>total return, dividends included.</dd>
+    <dt>nav_chg_4q</dt><dd>NAV per share change over four quarters.</dd>
+  </dl>
+  <h3>Quadrants</h3>
+  <p>Each name gets one label, evaluated in this order against the medians of the screened set:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Label</th><th>Rule</th><th>Meaning</th></tr>
+    <tr><td><span class="pill short">short_candidate</span></td><td>trend_4q &gt; 0.25 and quality above median and p_nav at or above median and 6-month return not more than 5 pts below median</td><td>book worsening faster than peers, worse than peers, priced like a good one, and the stock has not reacted</td></tr>
+    <tr><td><span class="pill long">long_candidate</span></td><td>quality below median and trend_4q ≤ 0.10 and p_nav in the bottom 30%</td><td>clean, stable book at a discount</td></tr>
+    <tr><td><span class="pill warn">deteriorating_priced</span></td><td>trend_4q &gt; 0.25, the rest not met</td><td>deteriorating, but the price already says so</td></tr>
+    <tr><td><span class="pill warn">cheap_but_messy</span></td><td>p_nav in the bottom 30%, quality not good</td><td>cheap for a reason</td></tr>
+    <tr><td><span class="pill neutral">neutral</span></td><td>everything else</td><td></td></tr>
+  </table></div>
+  <div class="formula">short_score = quality_pct + trend_pct + p_nav_pct + ret_6m_pct          (0 to 4, higher = better short)
+long_score  = (1 − quality_pct) + (1 − trend_pct) + (1 − p_nav_pct)     (0 to 3, higher = better long)</div>
+  <p>A second, backtested score (<code>validated_score</code>, section 9) can also mark a side: short when it is at least +0.75 and p_nav is at or above median, long when it is at most −0.5 and p_nav is in the bottom 35%.</p>
+</section>
+
+<section id="s9">
+  <h2><span class="n">9</span>Income and balance sheet</h2>
+  <div class="stage">Table: <b>signals.bdc_fundamentals</b>, from the filing's own income statement and balance sheet</div>
+  <p>These are the metrics every BDC analyst starts with. They come from the same filings, tagged without a holding identifier, and were missing until this round.</p>
+  <dl class="defs">
+    <dt>nii, nii_ps</dt><dd>net investment income for the quarter and per share. Tagged by 53 of 53 screened names once the four filer variants are read.</dd>
+    <dt>div_coverage</dt><dd>NII per share / quarterly dividend rate, where the dividend rate is the trailing twelve months of cash dividends divided by four. Below 1.0 the dividend is not earned.</dd>
+    <dt>nii_roe</dt><dd>annualised NII / net assets. The return the book earns for shareholders before marks.</dd>
+    <dt>leverage</dt><dd>borrowings / net assets. Losses on a levered book hit NAV multiplied.</dd>
+    <dt>nav_chg_1q, nav_chg_4q</dt><dd>NAV per share change over one and four quarters.</dd>
+    <dt>realized_gl_rate</dt><dd>realised gains or losses in the quarter / net assets. Tagged by fewer than half the names.</dd>
+    <dt>share_chg_4q</dt><dd>share count change over a year: buybacks and issuance.</dd>
+  </dl>
+  <p>Share counts are checked against net assets / NAV per share and replaced by the implied count when the tagged figure is off by more than 25% (Prospect tags a different class).</p>
+</section>
+
+<section id="s9b">
+  <h2><span class="n">9b</span>The return backtest</h2>
+  <div class="stage">Tables: <b>signals.bt_universe, bt_periods, bt_summary, bt_weights, bt_latest</b> · command <b>soi backtest</b></div>
+  <p>This is a point-in-time test on stock returns, not on NAV. Every quarter end gets one rebalance date 75 days later, by which time nearly every 10-Q and 10-K is in. A BDC enters the cross-section only if its filing was public by that date and the quarter passed the trust gate. Positions are taken at the close on the rebalance date and held to the next one; returns include dividends and are measured in excess of the equal-weight universe, so what is shown is the quality spread, not BDC beta.</p>
+  <p>Two statistics per signal per quarter: the rank correlation between the signal and the next quarter's excess return (IC), and the spread between the top and bottom quintile. Both are shown in the direction the signal is supposed to work, so positive is good.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Signal</th><th>Family</th><th class="num">Quarters</th><th class="num">Mean IC</th><th class="num">t-stat</th><th class="num">Hit rate</th><th class="num">Q spread / qtr</th><th class="num">Annualised, net</th></tr>
+    <tr><td class="k">pct_debt_below_90</td><td>marks</td><td class="num">15</td><td class="num">0.185</td><td class="num">4.2</td><td class="num">87%</td><td class="num">+5.7%</td><td class="num">+21%</td></tr>
+    <tr><td class="k">nav_chg_4q</td><td>income</td><td class="num">12</td><td class="num">0.200</td><td class="num">4.2</td><td class="num">92%</td><td class="num">+4.8%</td><td class="num">+18%</td></tr>
+    <tr><td class="k">pct_debt_below_95</td><td>marks</td><td class="num">15</td><td class="num">0.167</td><td class="num">3.5</td><td class="num">80%</td><td class="num">+6.0%</td><td class="num">+22%</td></tr>
+    <tr><td class="k">debt_mark</td><td>marks</td><td class="num">15</td><td class="num">0.179</td><td class="num">3.3</td><td class="num">87%</td><td class="num">+4.7%</td><td class="num">+17%</td></tr>
+    <tr><td class="k">wavg_risk</td><td>marks</td><td class="num">15</td><td class="num">0.150</td><td class="num">3.3</td><td class="num">87%</td><td class="num">+5.0%</td><td class="num">+18%</td></tr>
+    <tr><td class="k">nav_chg_1q</td><td>income</td><td class="num">15</td><td class="num">0.176</td><td class="num">3.1</td><td class="num">80%</td><td class="num">+4.2%</td><td class="num">+15%</td></tr>
+    <tr><td class="k"><b>composite, walk-forward</b></td><td>all</td><td class="num">11</td><td class="num">0.151</td><td class="num">2.7</td><td class="num">82%</td><td class="num">+5.6%</td><td class="num">+21%</td></tr>
+    <tr><td class="k">quality_score</td><td>flow</td><td class="num">15</td><td class="num">0.094</td><td class="num">2.6</td><td class="num">60%</td><td class="num">+3.4%</td><td class="num">+12%</td></tr>
+    <tr><td class="k">new_deterioration_rate</td><td>flow</td><td class="num">15</td><td class="num">0.089</td><td class="num">2.1</td><td class="num">67%</td><td class="num">+2.9%</td><td class="num">+10%</td></tr>
+    <tr><td class="k">quality_trend_4q</td><td>flow</td><td class="num">12</td><td class="num">0.091</td><td class="num">1.8</td><td class="num">58%</td><td class="num">+2.6%</td><td class="num">+9%</td></tr>
+    <tr><td class="k">leverage</td><td>income</td><td class="num">15</td><td class="num">0.052</td><td class="num">0.8</td><td class="num">67%</td><td class="num">+2.3%</td><td class="num">+8%</td></tr>
+    <tr><td class="k">ret_6m (momentum)</td><td>price</td><td class="num">15</td><td class="num">0.033</td><td class="num">0.6</td><td class="num">60%</td><td class="num">+1.6%</td><td class="num">+5%</td></tr>
+    <tr><td class="k">p_nav</td><td>price</td><td class="num">15</td><td class="num">−0.007</td><td class="num">−0.2</td><td class="num">60%</td><td class="num">−0.7%</td><td class="num">−4%</td></tr>
+    <tr><td class="k">generosity</td><td>peers</td><td class="num">15</td><td class="num">−0.016</td><td class="num">−0.4</td><td class="num">40%</td><td class="num">+0.4%</td><td class="num">0%</td></tr>
+    <tr><td class="k">nonaccrual_pct_cost</td><td>marks</td><td class="num">15</td><td class="num">−0.018</td><td class="num">−0.6</td><td class="num">53%</td><td class="num">−3.1%</td><td class="num">−14%</td></tr>
+    <tr><td class="k">div_coverage</td><td>income</td><td class="num">15</td><td class="num">−0.089</td><td class="num">−2.6</td><td class="num">20%</td><td class="num">−1.3%</td><td class="num">−7%</td></tr>
+  </table></div>
+  <p class="small">Annualised = 4 × (quarterly spread − 40 bp round-trip cost). Financing and borrow costs of the short leg are not included. The composite has 11 quarters because it needs four completed quarters before it can set weights.</p>
+  <h3>Trading on the filing day instead</h3>
+  <p>The quarterly test waits 75 days after quarter end so that everyone has filed. The event version enters each name at the first close after its own filing and holds it until the first close after its next filing (91 days on average). Each name is ranked against every other BDC's most recent filing as of that day, and its return is measured against the equal-weight return of the other names over the same window. Rows below are grouped by the quarter reported; 594 filings, 27 to 45 names per quarter. Names whose median daily dollar volume over the prior six months is under $100,000 are excluded at that date (Firsthand, Franklin BSP, and at times PhenixFIN, Rand and Investcorp): they cannot be traded at the quoted price.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Signal</th><th class="num">Quarters</th><th class="num">Mean IC</th><th class="num">t-stat</th><th class="num">Hit rate</th><th class="num">Q spread / hold</th><th class="num">Annualised, net</th></tr>
+    <tr><td class="k">pct_debt_below_95</td><td class="num">15</td><td class="num">0.197</td><td class="num">7.9</td><td class="num">100%</td><td class="num">+3.5%</td><td class="num">+13%</td></tr>
+    <tr><td class="k">pct_debt_below_90</td><td class="num">15</td><td class="num">0.192</td><td class="num">6.8</td><td class="num">100%</td><td class="num">+3.8%</td><td class="num">+14%</td></tr>
+    <tr><td class="k">nav_chg_4q</td><td class="num">12</td><td class="num">0.282</td><td class="num">6.2</td><td class="num">92%</td><td class="num">+5.8%</td><td class="num">+22%</td></tr>
+    <tr><td class="k">debt_mark</td><td class="num">15</td><td class="num">0.186</td><td class="num">5.8</td><td class="num">93%</td><td class="num">+3.0%</td><td class="num">+11%</td></tr>
+    <tr><td class="k">nav_chg_1q</td><td class="num">15</td><td class="num">0.205</td><td class="num">3.9</td><td class="num">87%</td><td class="num">+4.5%</td><td class="num">+17%</td></tr>
+    <tr><td class="k">new_deterioration_rate</td><td class="num">15</td><td class="num">0.139</td><td class="num">3.2</td><td class="num">67%</td><td class="num">+2.3%</td><td class="num">+8%</td></tr>
+    <tr><td class="k">d4_pct_debt_below_90</td><td class="num">12</td><td class="num">0.113</td><td class="num">3.2</td><td class="num">75%</td><td class="num">+1.7%</td><td class="num">+5%</td></tr>
+    <tr><td class="k">p_nav</td><td class="num">15</td><td class="num">−0.024</td><td class="num">−0.5</td><td class="num">40%</td><td class="num">−1.2%</td><td class="num">−7%</td></tr>
+    <tr><td class="k">nonaccrual_pct_cost</td><td class="num">15</td><td class="num">−0.040</td><td class="num">−1.1</td><td class="num">40%</td><td class="num">−1.5%</td><td class="num">−8%</td></tr>
+  </table></div>
+  <div class="callout"><p><b>Acting on the filing day is better than waiting.</b> The rankings get steadier: the share below 90 ranked every one of 15 quarters correctly, with a t-statistic of 6.8 against 4.6 for the quarterly version. Removing the illiquid names cut the spread from about 6% to about 4% per hold, which says part of the earlier figure lived in stocks that could not be traded; the direction never changed.</p></div>
+  <h3>The default strategy</h3>
+  <p>Average the peer-rank of four signals into one health score: share below 90, share below 95, book mark, and NAV per share change over four quarters. On each filing day, long the healthiest fifth, short the sickest fifth, equal weight, hold to the next filing. On liquid names only, this won 14 of 15 quarters with an average excess spread of 4.7% per hold and a worst quarter of −0.5%. Forty variations (one to seven signals, 5 to 12 names a side, equal or rank sizing) all work; this one is chosen for robustness, not because it was the best-looking line.</p>
+  <h3>Independent checks run on 9 Sep 2026</h3>
+  <ul>
+    <li>Closing prices for ARCC, GSBD, OFS, TPVG and MAIN on five dates match Nasdaq's own historical data to the cent.</li>
+    <li>Dividend counts and totals match the known payout schedules (Ares four times $0.48; Main Street monthly plus specials).</li>
+    <li>Tagged NAV per share agrees with net assets divided by shares within 2% for all 50 names that tag both.</li>
+    <li>Share below 90, book mark and NAV change recomputed by hand from the holdings table match the signal tables.</li>
+    <li>One backtest quarter (Sep 2025) rebuilt from scratch with separate code: IC −0.237 versus −0.233 in the tables, identical quintile spread.</li>
+  </ul>
+  <h3>The composite, quarter by quarter</h3>
+  <p>Weights are refit each quarter from the ICs of the quarters already completed, so every number below is out of sample. Positive spread means the names the model liked beat the names it disliked.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Rebalance</th><th class="num">Names</th><th class="num">IC</th><th class="num">Q5 − Q1</th><th class="num">Bottom quintile</th><th class="num">Top quintile</th><th class="num">Universe return</th></tr>
+    <tr><td>Dec 2023</td><td class="num">38</td><td class="num">+0.16</td><td class="num">+4.4%</td><td class="num">−1.3%</td><td class="num">+3.1%</td><td class="num">+1.9%</td></tr>
+    <tr><td>Mar 2024</td><td class="num">37</td><td class="num">−0.08</td><td class="num">−1.5%</td><td class="num">+0.8%</td><td class="num">−0.8%</td><td class="num">+7.4%</td></tr>
+    <tr><td>Jun 2024</td><td class="num">44</td><td class="num">+0.09</td><td class="num">+6.6%</td><td class="num">−4.0%</td><td class="num">+2.6%</td><td class="num">−2.6%</td></tr>
+    <tr><td>Sep 2024</td><td class="num">44</td><td class="num">+0.27</td><td class="num">+10.1%</td><td class="num">−5.1%</td><td class="num">+5.0%</td><td class="num">+4.4%</td></tr>
+    <tr><td>Dec 2024</td><td class="num">44</td><td class="num">+0.40</td><td class="num">+8.0%</td><td class="num">−3.8%</td><td class="num">+4.2%</td><td class="num">+0.5%</td></tr>
+    <tr><td>Mar 2025</td><td class="num">36</td><td class="num">+0.38</td><td class="num">+10.7%</td><td class="num">−7.3%</td><td class="num">+3.4%</td><td class="num">−3.7%</td></tr>
+    <tr><td>Jun 2025</td><td class="num">47</td><td class="num">+0.20</td><td class="num">+5.1%</td><td class="num">−2.6%</td><td class="num">+2.5%</td><td class="num">+2.0%</td></tr>
+    <tr><td>Sep 2025</td><td class="num">48</td><td class="num">+0.10</td><td class="num">+3.8%</td><td class="num">−1.5%</td><td class="num">+2.3%</td><td class="num">−3.9%</td></tr>
+    <tr><td>Dec 2025</td><td class="num">47</td><td class="num">+0.31</td><td class="num">+12.4%</td><td class="num">−6.8%</td><td class="num">+5.6%</td><td class="num">−15.3%</td></tr>
+    <tr><td>Mar 2026</td><td class="num">44</td><td class="num">−0.18</td><td class="num">−5.4%</td><td class="num">+2.0%</td><td class="num">−3.3%</td><td class="num">+4.9%</td></tr>
+    <tr><td>Jun 2026</td><td class="num">48</td><td class="num">+0.14</td><td class="num">+8.3%</td><td class="num">−5.9%</td><td class="num">+2.4%</td><td class="num">+1.7%</td></tr>
+  </table></div>
+  <div class="callout"><p><b>What this means.</b> The level of stress in the marks is the trade. The share of debt below 90 ranked the next quarter correctly in 13 of 15 quarters and the composite in 9 of 11, including the Dec 2025 quarter when the whole sector fell 15% and the spread was still 12 points. The signal also works when the sector rallies (Mar 2024 and Mar 2026 were the two losing quarters, both strong up-quarters where the weakest names bounced hardest). Non-accruals, price to NAV, momentum and cross-lender generosity carry no information at the stock level in this sample. Dividend coverage runs slightly backwards: the names covering their dividend best have been the ones de-rating, which is worth understanding before using it either way.</p></div>
+  <div class="callout warn"><p><b>Before trusting it.</b> One credit cycle, 36 to 48 names per quarter, so a quintile is eight to ten stocks and a single blow-up moves the spread. BDCs acquired or delisted since 2022 are not in the universe, which flatters the short leg. The loan risk score is kept out of the composite because its weights were fitted on the whole sample. Borrow and financing costs are not modelled. Treat the annualised figures as the right order of magnitude, not a forecast.</p></div>
+</section>
+
+<section id="s10">
+  <h2><span class="n">10</span>How to read the numbers</h2>
+  <h3>Read levels, then flows, then price</h3>
+  <ol>
+    <li><b>Level of stress:</b> <code>pct_debt_below_90</code> and <code>wavg_risk</code>. Above 15% below 90 is a troubled book; below 5% is clean. This is the validated part.</li>
+    <li><b>Flow of new stress:</b> <code>new_deterioration_rate</code> and <code>markdown_share</code>. Above 3% of the book newly crossing 95 in a single quarter is a bad quarter; two in a row is a trend.</li>
+    <li><b>Honesty of the marks:</b> <code>generosity</code>, <code>late_mark_rate</code>, and the loan watchlists for loans this BDC carries near par that a peer marks below 90. This decides whether the NAV can be trusted.</li>
+    <li><b>Price:</b> <code>p_nav</code> against the sector median of 0.74 today, and the six-month return against the median of +3.8%. A worsening book at a premium is the short; a clean book in the bottom 30% of p_nav is the long.</li>
+  </ol>
+  <h3>Things that mislead</h3>
+  <ul>
+    <li>A non-accrual share of 0% usually means the filer did not tag non-accrual, not that there is none. Use marks instead.</li>
+    <li>PIK share is structural for venture lenders (Hercules 40%, TriplePoint 28%) and for BDCs with big preferred books. Compare within a peer group, not across.</li>
+    <li>Equity-heavy BDCs (Main Street, Capital Southwest, Gladstone Investment) have small debt books relative to NAV; their NAV is driven by equity marks the credit metrics do not cover.</li>
+    <li>A filer that changed its identifier format shows a spike in new loans and exits that quarter. Check <code>match_method</code>.</li>
+    <li>Generosity built on fewer than 40 shared loans, or the scorecard on fewer than 200 judged loan-quarters, is noise.</li>
+    <li>The June quarter's four-quarter window closes in mid 2027, so the loan model's most recent labels are from mid 2025. Recent quarters are scored with weights, not judged.</li>
+  </ul>
+</section>
+
+<section id="s11">
+  <h2><span class="n">11</span>Today's board</h2>
+  <p>The screened set as of the June 2026 filings, ordered by short score. Quality and trend are peer z-scores; the rest are shares of the debt book or ratios.</p>
+  <div class="tablewrap"><table>
+    <tr><th>BDC</th><th>Label</th><th class="num">Quality</th><th class="num">Trend 4q</th><th class="num">P/NAV</th><th class="num">Below 90</th><th class="num">Non-accrual</th><th class="num">PIK</th><th class="num">New stress</th><th class="num">Generosity</th><th class="num">Book mark</th><th class="num">Ret 6m</th><th class="num">Short</th><th class="num">Long</th></tr>
+    <tr><td>GSBD</td><td><span class="pill short">short</span></td><td class="num">0.08</td><td class="num">+0.36</td><td class="num">0.79</td><td class="num">10.5%</td><td class="num">5.1%</td><td class="num">17.0%</td><td class="num">3.1%</td><td class="num">−6.8</td><td class="num">0.950</td><td class="num">+12%</td><td class="num">2.83</td><td class="num">0.89</td></tr>
+    <tr><td>OXSQ</td><td><span class="pill warn">deteriorating, priced</span></td><td class="num">0.49</td><td class="num">+0.60</td><td class="num">1.03</td><td class="num">31.4%</td><td class="num">0.0%</td><td class="num">6.5%</td><td class="num">15.1%</td><td class="num">−1.7</td><td class="num">0.889</td><td class="num">−16%</td><td class="num">2.72</td><td class="num">0.32</td></tr>
+    <tr><td>OFS</td><td><span class="pill warn">deteriorating, priced</span></td><td class="num">1.54</td><td class="num">+1.05</td><td class="num">0.45</td><td class="num">54.5%</td><td class="num">18.1%</td><td class="num">25.9%</td><td class="num">15.0%</td><td class="num">−1.3</td><td class="num">0.748</td><td class="num">+11%</td><td class="num">2.68</td><td class="num">0.98</td></tr>
+    <tr><td>GLAD</td><td><span class="pill neutral">neutral</span></td><td class="num">0.01</td><td class="num">+0.01</td><td class="num">0.92</td><td class="num">10.2%</td><td class="num">5.8%</td><td class="num">18.2%</td><td class="num">4.0%</td><td class="num">+0.6</td><td class="num">0.971</td><td class="num">+15%</td><td class="num">2.62</td><td class="num">1.17</td></tr>
+    <tr><td>MSDL</td><td><span class="pill neutral">neutral</span></td><td class="num">0.20</td><td class="num">+0.18</td><td class="num">0.76</td><td class="num">7.7%</td><td class="num">4.5%</td><td class="num">16.0%</td><td class="num">6.9%</td><td class="num">−2.8</td><td class="num">0.968</td><td class="num">+8%</td><td class="num">2.55</td><td class="num">1.02</td></tr>
+    <tr><td>TCPC</td><td><span class="pill warn">cheap but messy</span></td><td class="num">0.28</td><td class="num">+0.16</td><td class="num">0.61</td><td class="num">18.0%</td><td class="num">0.0%</td><td class="num">23.8%</td><td class="num">7.7%</td><td class="num">+0.4</td><td class="num">0.919</td><td class="num">+18%</td><td class="num">2.53</td><td class="num">1.30</td></tr>
+    <tr><td>GBDC</td><td><span class="pill neutral">neutral</span></td><td class="num">0.01</td><td class="num">+0.03</td><td class="num">0.90</td><td class="num">3.1%</td><td class="num">3.2%</td><td class="num">21.5%</td><td class="num">3.8%</td><td class="num">+0.1</td><td class="num">0.982</td><td class="num">+12%</td><td class="num">2.53</td><td class="num">1.15</td></tr>
+    <tr><td>FSK</td><td><span class="pill neutral">neutral</span></td><td class="num">0.28</td><td class="num">−0.06</td><td class="num">0.66</td><td class="num">19.8%</td><td class="num">8.9%</td><td class="num">21.3%</td><td class="num">2.9%</td><td class="num">−4.2</td><td class="num">0.931</td><td class="num">+26%</td><td class="num">2.49</td><td class="num">1.45</td></tr>
+    <tr><td>ARCC</td><td><span class="pill neutral">neutral</span></td><td class="num">0.00</td><td class="num">−0.08</td><td class="num">1.02</td><td class="num">9.1%</td><td class="num">3.0%</td><td class="num">16.1%</td><td class="num">4.9%</td><td class="num">−1.2</td><td class="num">0.967</td><td class="num">+12%</td><td class="num">2.47</td><td class="num">1.23</td></tr>
+    <tr><td>BCSF</td><td><span class="pill warn">deteriorating, priced</span></td><td class="num">0.25</td><td class="num">+0.45</td><td class="num">0.69</td><td class="num">11.0%</td><td class="num">3.7%</td><td class="num">20.0%</td><td class="num">5.3%</td><td class="num">+2.1</td><td class="num">0.964</td><td class="num">−2%</td><td class="num">2.34</td><td class="num">0.98</td></tr>
+    <tr><td>CION</td><td><span class="pill warn">deteriorating, priced</span></td><td class="num">0.47</td><td class="num">+0.31</td><td class="num">0.53</td><td class="num">25.4%</td><td class="num">4.8%</td><td class="num">0.0%</td><td class="num">28.6%</td><td class="num">+3.6</td><td class="num">0.904</td><td class="num">+3%</td><td class="num">2.23</td><td class="num">1.23</td></tr>
+    <tr><td>BCIC</td><td><span class="pill warn">deteriorating, priced</span></td><td class="num">0.86</td><td class="num">+0.50</td><td class="num">0.49</td><td class="num">37.9%</td><td class="num">4.9%</td><td class="num">20.5%</td><td class="num">13.1%</td><td class="num">+1.4</td><td class="num">0.870</td><td class="num">−12%</td><td class="num">2.02</td><td class="num">1.11</td></tr>
+    <tr><td>MAIN</td><td><span class="pill neutral">neutral</span></td><td class="num">−0.17</td><td class="num">−0.18</td><td class="num">1.66</td><td class="num">7.4%</td><td class="num">5.1%</td><td class="num">13.7%</td><td class="num">0.3%</td><td class="num">+0.4</td><td class="num">0.965</td><td class="num">+3%</td><td class="num">1.98</td><td class="num">1.51</td></tr>
+    <tr><td>HTGC</td><td><span class="pill neutral">neutral</span></td><td class="num">−0.15</td><td class="num">−0.29</td><td class="num">1.44</td><td class="num">1.8%</td><td class="num">0.4%</td><td class="num">40.1%</td><td class="num">0.7%</td><td class="num">−1.4</td><td class="num">0.997</td><td class="num">+29%</td><td class="num">2.34</td><td class="num">1.62</td></tr>
+    <tr><td>TSLX</td><td><span class="pill neutral">neutral</span></td><td class="num">−0.22</td><td class="num">−0.15</td><td class="num">1.10</td><td class="num">4.0%</td><td class="num">2.7%</td><td class="num">13.4%</td><td class="num">1.1%</td><td class="num">0.0</td><td class="num">1.011</td><td class="num">+3%</td><td class="num">1.83</td><td class="num">1.62</td></tr>
+    <tr><td>PSEC</td><td><span class="pill warn">cheap but messy</span></td><td class="num">0.48</td><td class="num">−0.07</td><td class="num">0.38</td><td class="num">21.6%</td><td class="num">5.6%</td><td class="num">49.3%</td><td class="num">2.4%</td><td class="num">+3.4</td><td class="num">0.945</td><td class="num">−10%</td><td class="num">1.49</td><td class="num">1.68</td></tr>
+    <tr><td>WHF</td><td><span class="pill long">long</span></td><td class="num">−0.34</td><td class="num">−0.09</td><td class="num">0.60</td><td class="num">5.8%</td><td class="num">0.0%</td><td class="num">13.5%</td><td class="num">0.1%</td><td class="num">+2.1</td><td class="num">0.977</td><td class="num">+2%</td><td class="num">1.06</td><td class="num">2.34</td></tr>
+    <tr><td>FRBP</td><td><span class="pill long">long</span></td><td class="num">−0.14</td><td class="num">−0.18</td><td class="num">0.63</td><td class="num">8.2%</td><td class="num">2.9%</td><td class="num">9.5%</td><td class="num">3.1%</td><td class="num">+0.2</td><td class="num">0.916</td><td class="num">−15%</td><td class="num">0.87</td><td class="num">2.19</td></tr>
+    <tr><td>RWAY</td><td><span class="pill long">long</span></td><td class="num">−0.19</td><td class="num">−0.51</td><td class="num">0.55</td><td class="num">4.3%</td><td class="num">4.8%</td><td class="num">21.5%</td><td class="num">2.4%</td><td class="num">+0.2</td><td class="num">0.979</td><td class="num">−1%</td><td class="num">0.70</td><td class="num">2.64</td></tr>
+    <tr><td>PNNT</td><td><span class="pill long">long</span></td><td class="num">−0.12</td><td class="num">−0.42</td><td class="num">0.55</td><td class="num">14.5%</td><td class="num">3.0%</td><td class="num">8.5%</td><td class="num">3.9%</td><td class="num">0.0</td><td class="num">0.938</td><td class="num">−14%</td><td class="num">0.66</td><td class="num">2.45</td></tr>
+    <tr><td>CCAP</td><td><span class="pill long">long</span></td><td class="num">−0.15</td><td class="num">−0.41</td><td class="num">0.57</td><td class="num">9.3%</td><td class="num">5.0%</td><td class="num">10.6%</td><td class="num">2.4%</td><td class="num">+0.4</td><td class="num">0.970</td><td class="num">−14%</td><td class="num">0.64</td><td class="num">2.45</td></tr>
+    <tr><td>SCM</td><td><span class="pill long">long</span></td><td class="num">−0.35</td><td class="num">−0.49</td><td class="num">0.65</td><td class="num">6.5%</td><td class="num">0.0%</td><td class="num">9.2%</td><td class="num">1.1%</td><td class="num">+0.2</td><td class="num">0.978</td><td class="num">−6%</td><td class="num">0.57</td><td class="num">2.62</td></tr>
+  </table></div>
+  <p class="small">Twenty-two of the 48 names shown; the full set is in the app's screener. Sector medians: P/NAV 0.74, quality 0.00, six-month return +3.8%.</p>
+  <h3>The backtested composite today</h3>
+  <p>Signal as of the June 2026 filings, priced on 13 Sep 2026. Positive means the model expects the stock to beat the sector next quarter; the weights are those fitted on all fifteen completed quarters (NAV change over four and one quarters, share below 90 and 95, book mark, four-quarter change in share below 90).</p>
+  <div class="tablewrap"><table>
+    <tr><th>Expected to outperform</th><th class="num">Score</th><th class="num">Below 90</th><th class="num">P/NAV</th><th>Expected to underperform</th><th class="num">Score</th><th class="num">Below 90</th><th class="num">P/NAV</th></tr>
+    <tr><td>HTGC</td><td class="num">+0.67</td><td class="num">1.8%</td><td class="num">1.44</td><td>BCIC</td><td class="num">−1.18</td><td class="num">37.9%</td><td class="num">0.49</td></tr>
+    <tr><td>LIEN</td><td class="num">+0.64</td><td class="num">0.0%</td><td class="num">0.76</td><td>OFS</td><td class="num">−1.12</td><td class="num">54.5%</td><td class="num">0.45</td></tr>
+    <tr><td>WHF</td><td class="num">+0.64</td><td class="num">5.8%</td><td class="num">0.60</td><td>OXSQ</td><td class="num">−0.81</td><td class="num">31.4%</td><td class="num">1.03</td></tr>
+    <tr><td>SCM</td><td class="num">+0.59</td><td class="num">6.5%</td><td class="num">0.65</td><td>TCPC</td><td class="num">−0.46</td><td class="num">18.0%</td><td class="num">0.61</td></tr>
+    <tr><td>MAIN</td><td class="num">+0.57</td><td class="num">7.4%</td><td class="num">1.66</td><td>AFCG</td><td class="num">−0.43</td><td class="num">45.1%</td><td class="num">0.42</td></tr>
+    <tr><td>TRIN</td><td class="num">+0.57</td><td class="num">4.8%</td><td class="num">1.34</td><td>PSBD</td><td class="num">−0.38</td><td class="num">26.1%</td><td class="num">0.77</td></tr>
+    <tr><td>KBDC</td><td class="num">+0.54</td><td class="num">0.5%</td><td class="num">0.82</td><td>TPVG</td><td class="num">−0.37</td><td class="num">37.3%</td><td class="num">0.59</td></tr>
+    <tr><td>MSIF</td><td class="num">+0.51</td><td class="num">13.2%</td><td class="num">0.76</td><td>PSEC</td><td class="num">−0.34</td><td class="num">21.6%</td><td class="num">0.38</td></tr>
+    <tr><td>GLAD</td><td class="num">+0.48</td><td class="num">10.2%</td><td class="num">0.92</td><td>ICMB</td><td class="num">−0.31</td><td class="num">8.2%</td><td class="num">0.25</td></tr>
+    <tr><td>PFLT</td><td class="num">+0.48</td><td class="num">3.9%</td><td class="num">0.70</td><td>FSK</td><td class="num">−0.28</td><td class="num">19.8%</td><td class="num">0.66</td></tr>
+  </table></div>
+  <p class="small">Full ranking of all 48 names in <code>signals.bt_latest</code>, with the three signals dragging and supporting each one.</p>
+  <h3>Reading three of them</h3>
+  <ul>
+    <li><b>GSBD, the only short candidate.</b> Trend +0.36 with a book marked 5 points harder than peers and a 12% run: the label comes from the trend and the price, while generosity of −6.8 says its marks are conservative. Two of the three legs point opposite ways. This is exactly where the quadrant rule needs work.</li>
+    <li><b>OFS.</b> 54% of the debt book below 90, 18% on non-accrual, book mark 0.75, at 0.45 of NAV. Everything is bad and priced. No trade unless you have a view on recovery.</li>
+    <li><b>SCM, WHF, RWAY.</b> Low stress, negative trend, 0.55 to 0.65 of NAV. These are the cleanest discounted books. The question the data cannot answer is why the market discounts them.</li>
+  </ul>
+</section>
+
+<section id="s12">
+  <h2><span class="n">12</span>Weak points to fix next</h2>
+  <p>In order of how much each changes the trade.</p>
+  <ol>
+    <li><b>The screen's quadrant labels still use the hand-written rules.</b> The backtested composite disagrees with them: it puts Goldman in the middle, not on the short list, and it ranks Hercules, Trinity and Main Street at the top despite their premiums. The screen should show the composite.</li>
+    <li><b>Survivorship.</b> BDCs acquired or delisted since 2022 (BlackRock Capital, Blue Owl III, Logan Ridge, First Eagle, Harvest) have no free price history; fixing this needs a paid price source.</li>
+    <li><b>Timing, done:</b> the filing-day version is tested and stronger (section 9b). Remaining: rebuild the walk-forward composite in the event framework and produce an equity curve with turnover and borrow costs.</li>
+    <li><b>Shared-borrower lead-lag.</b> Generosity does not predict at the stock level, but the loan-level result says peer marks do predict loan outcomes. The stock-level version should be "how much of this BDC's book has a peer marked lower", weighted by size, and it should be tested as an intra-quarter trigger.</li>
+    <li><b>Peer groups.</b> Venture lenders and equity-heavy BDCs are scored against first-lien lenders. Z-scores within peer groups would sharpen the marks signals.</li>
+    <li><b>Costs and capacity.</b> Borrow availability and cost per name, especially for the small names that dominate the bottom quintile.</li>
+    <li><b>Dividend coverage runs backwards.</b> Find out whether that is a real pattern (high coverage names were the ones cutting anyway) or a data artefact before it earns a weight.</li>
+  </ol>
+</section>
+</main>
+</div>

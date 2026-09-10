@@ -60,3 +60,157 @@ def test_loan_ids_stable_within_bdc(con):
         "SELECT count(*) FROM (SELECT loan_id, count(DISTINCT cik) c FROM core.loan_history GROUP BY 1 HAVING c > 1)"
     ).fetchone()[0]
     assert bad == 0
+
+
+def test_heading_rows_not_in_holdings(con):
+    # Space-separated hierarchies ("Debt Investments Healthcare ...") leaked sector headings
+    # into holdings; a heading is a word-boundary prefix of >= 2 other rows in the same period.
+    n = con.execute(
+        """
+        SELECT count(*) FROM (
+            SELECT p.cik, p.period_end, p.identifier, count(*) AS n_child
+            FROM core.holdings p JOIN core.holdings c
+              ON c.cik = p.cik AND c.period_end = p.period_end AND c.identifier <> p.identifier
+             AND starts_with(c.identifier, p.identifier || ' ')
+            WHERE p.cik IN (1786108, 1508655)  -- Trinity, Sixth Street
+            GROUP BY 1, 2, 3 HAVING count(*) >= 2
+        )
+        """
+    ).fetchone()[0]
+    assert n == 0
+
+
+def test_no_holding_exceeds_reported_total(con):
+    bad = con.execute(
+        """
+        SELECT count(*) FROM core.holdings h JOIN core.reconciliation r USING (cik, period_end)
+        WHERE r.total_fv > 0 AND h.fair_value > 1.05 * r.total_fv
+        """
+    ).fetchone()[0]
+    assert bad == 0
+
+
+def test_reconciliation_rate(con):
+    ok, n = con.execute(
+        "SELECT count(*) FILTER (WHERE coverage BETWEEN 0.9 AND 1.1 OR override_note IS NOT NULL), "
+        "count(*) FROM core.reconciliation"
+    ).fetchone()
+    assert ok / n >= 0.8, (ok, n)
+
+
+def test_public_bdc_reconciliation_rate(con):
+    ok, n = con.execute(
+        """
+        SELECT count(*) FILTER (WHERE coverage BETWEEN 0.9 AND 1.1 OR override_note IS NOT NULL), count(*)
+        FROM core.reconciliation r JOIN ref.bdc_master m USING (cik) WHERE m.is_public
+        """
+    ).fetchone()
+    assert ok / n >= 0.95, (ok, n)
+
+
+def test_member_axis_filers_have_history(con):
+    # These public BDCs tag holdings as axis-member combinations rather than the typed
+    # identifier axis; before member-axis extraction they had 5-8 periods each.
+    rows = con.execute(
+        """
+        SELECT m.ticker, count(DISTINCT h.period_end) FROM ref.bdc_master m
+        JOIN core.holdings h USING (cik)
+        WHERE m.ticker IN ('HRZN', 'KBDC', 'OXSQ', 'PFX', 'PSBD', 'SAR', 'TPVG', 'NSLR')
+        GROUP BY 1
+        """
+    ).fetchall()
+    assert len(rows) == 8, rows
+    assert all(n >= 12 for _, n in rows), rows
+
+
+def test_no_phantom_periods(con):
+    # A period sourced from another filing's prior-period comparatives with a handful of rows
+    # (affiliate roll-forward tables) must not survive as a BDC-period.
+    bad = con.execute(
+        """
+        WITH mx AS (SELECT cik, max(n_holdings) AS mx FROM core.reconciliation GROUP BY 1)
+        SELECT count(*) FROM core.reconciliation r JOIN mx USING (cik)
+        JOIN core.period_source ps USING (cik, period_end)
+        WHERE ps.period <> r.period_end AND r.n_holdings < 0.1 * mx.mx AND mx.mx >= 50
+        """
+    ).fetchone()[0]
+    assert bad == 0
+
+
+def test_foreign_currency_facts_not_double_counted(con):
+    # TSLX tags the local-currency par of European loans as a second fair value fact.
+    cov = con.execute(
+        """
+        SELECT r.coverage FROM core.reconciliation r JOIN ref.bdc_master m USING (cik)
+        WHERE m.ticker = 'TSLX' ORDER BY r.period_end DESC LIMIT 1
+        """
+    ).fetchone()[0]
+    assert 0.98 <= cov <= 1.02, cov
+
+
+def test_gsbd_recent_periods_reconcile(con):
+    # The bulk data misses 8-12% of GSBD's rows since 2025; `soi ixfacts` fills them from the filing.
+    rows = con.execute(
+        """
+        SELECT period_end, coverage FROM core.reconciliation r JOIN ref.bdc_master m USING (cik)
+        WHERE m.ticker = 'GSBD' AND period_end >= DATE '2025-03-31'
+        """
+    ).fetchall()
+    assert rows and all(c >= 0.95 for _, c in rows), rows
+
+
+def test_loan_links_survive_format_changes(con):
+    # share of holdings in a trusted period that continue a loan seen in the previous trusted period
+    share, n = con.execute(
+        """
+        WITH ok AS (SELECT cik, period_end FROM core.reconciliation
+                    WHERE coverage BETWEEN 0.9 AND 1.1 OR override_note IS NOT NULL),
+        per AS (SELECT cik, period_end, lag(period_end) OVER (PARTITION BY cik ORDER BY period_end) AS prev FROM ok)
+        SELECT avg((l.first_period < p.period_end)::INT), count(*)
+        FROM per p JOIN core.loan_history h USING (cik, period_end) JOIN core.loans l USING (loan_id)
+        JOIN ref.bdc_master m USING (cik) WHERE m.is_public AND p.prev IS NOT NULL
+        """
+    ).fetchone()
+    assert share >= 0.75, (share, n)
+
+
+def test_quality_score_for_every_sizeable_public_bdc(con):
+    missing = con.execute(
+        """
+        SELECT ticker FROM signals.bdc_latest
+        WHERE is_public AND data_ok AND n_debt >= 30 AND quality_score IS NULL
+          AND period_end >= (SELECT max(period_end) FROM core.holdings) - INTERVAL 200 DAY
+        """
+    ).fetchall()
+    assert missing == [], missing
+
+
+def test_debt_rates_are_rates(con):
+    bad = con.execute(
+        """
+        SELECT avg((rate NOT BETWEEN 0.01 AND 0.30)::INT) FROM core.holdings h
+        JOIN signals.bdc_latest l USING (cik, period_end)
+        WHERE l.is_public AND h.is_debt AND h.rate IS NOT NULL
+        """
+    ).fetchone()[0]
+    assert bad < 0.02, bad
+
+
+def test_fundamentals_cover_public_bdcs(con):
+    n, nii, lev = con.execute(
+        """
+        SELECT count(*), count(f.nii), count(f.leverage)
+        FROM signals.bdc_fundamentals f JOIN signals.bdc_latest l USING (cik, period_end) WHERE l.is_public
+        """
+    ).fetchone()
+    assert nii >= 0.9 * n and lev >= 0.8 * n, (n, nii, lev)
+
+
+def test_backtest_tables(con):
+    n_dates, n_signals = con.execute(
+        "SELECT count(DISTINCT rebal_date), count(DISTINCT signal) FROM signals.bt_periods"
+    ).fetchone()
+    assert n_dates >= 12 and n_signals >= 20, (n_dates, n_signals)
+    # no forward return may be measured before the filing was public
+    leak = con.execute("SELECT count(*) FROM signals.bt_universe WHERE filed > rebal_date").fetchone()[0]
+    assert leak == 0

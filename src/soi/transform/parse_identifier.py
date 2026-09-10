@@ -32,13 +32,13 @@ INSTRUMENT_RULES: list[tuple[str, bool, list[str]]] = [
         r"\bstock\b", r"\bclass [a-z]\b", r"\bl\.?p\.? interest", r"\bpartnership interest",
         r"\bllc interest", r"\bordinary\b", r"\bprofits? interest", r"\bco-?invest",
     ]),
-    ("second_lien", True, [r"\bsecond[- ]lien\b", r"\b2nd[- ]lien\b", r"\bsecond_lien\b", r"\bSLD\b"]),
+    ("second_lien", True, [r"\bsecond[- ]lien\b", r"\b2nd[- ]lien\b", r"\bsecond_lien\b", r"\bSLD\b", r"\bSLSD\b"]),
     ("subordinated", True, [
         r"\bsubordinat", r"\bmezz", r"\bjunior\b", r"\bunsecured\b", r"\bsenior notes?\b",
         r"\bbond", r"\bpik note", r"\bconvertible note",
     ]),
     ("first_lien", True, [
-        r"\bfirst[- ]lien\b", r"\b1st[- ]lien\b", r"\bfirst_lien\b", r"\bunitranche\b",
+        r"\bfirst[- ]lien\b", r"\b1st[- ]lien\b", r"\bfirst_lien\b", r"\bunitranche\b", r"\bFLSD\b",
         r"\bone[- ]stop\b", r"\bsecured debt\b", r"\bgrowth capital\b", r"\bsenior secured\b",
         r"\bFLD\b",
         r"\bsenior debt\b", r"\bsenior loan\b", r"\bsenior term\b",
@@ -93,6 +93,8 @@ CATEGORY_PHRASES = [
     r"issuer name", r"name of (issuer|company|portfolio company)", r"company name",
     r"non ?affiliate", r"life science", r"technology", r"healthcare", r"medical device", r"software",
     r"investment type", r"type", r"and", r"ncna", r"nca", r"inv\.", r"debt and equity inv\.?",
+    r"debt and equity investments?", r"inv\.? in (ncna|nca|ca|c|na) prtfl comp", r"prtfl comp",
+    r"flsd", r"slsd", r"sd", r"pe", r"ce",
     r"structured finance securities",
     r"portfolio company", r"issuer", r"company", r"investment",
     r"united states( of america)?", r"u\.?s\.?a?\b", r"canada", r"united kingdom", r"europe",
@@ -198,6 +200,22 @@ CATEGORY_TOKEN_RE = re.compile(
     r"money market|short[- ]term|united states|u\.?s\.?a?|canada|europe|united kingdom|"
     r"[\d.,]+%?|first lien|second lien|warrants?|preferred|common|total|sub ?total)"
     r"( (investments?|securities|debt|equity))?\.?$",
+    re.IGNORECASE,
+)
+# A pipe segment made only of these words describes the instrument, never the issuer
+# ("Senior Secured First Lien Term Loan | Advocates For Disabled Vets LLC").
+_VOCAB_ONLY_RE = re.compile(
+    r"^(?:(?:senior|secured|unsecured|first|second|third|1st|2nd|lien|term|loans?|debt|revolver|"
+    r"revolving|delayed|draw|unitranche|notes?|preferred|common|stock|equity|equities|warrants?|units?|"
+    r"interests?|subordinated|mezzanine|convertible|tranche|facility|credit|line|of|and|or|class|"
+    r"series|membership|growth|capital|fixed|floating|rate|ddtl|tl[abc]?|investments?|securities|"
+    r"other|cash|equivalents?|money|market|funds?|short|structured|clo|asset|backed|total|sub|"
+    r"last|first|out|bridge|priority|super|junior|holdco|opco|pik|toggle|bond|bonds|"
+    r"bank|life|science|sciences|healthcare|health|care|technology|software|based|abl|sponsor|"
+    r"finance|financing|specialty|flow|recurring|revenue|venture|lending|program|equipment|leasing|"
+    r"real|estate|mortgage|lender|lenders|at|percent|point|hundred|thousand|twenty|thirty|forty|fifty|"
+    r"sixty|seventy|eighty|ninety|"
+    r"one|two|three|four|five|six|seven|eight|nine|ten|[a-z]|\d+(?:\.\d+)?%?)\b[\s,\-–—/()]*)+$",
     re.IGNORECASE,
 )
 RATE_DATE_RE = re.compile(
@@ -341,7 +359,7 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
     if "|" in head:
         for seg in head.split("|"):
             seg = _clean_token(_CATEGORY_HEAD_RE.sub("", seg.strip(), count=1))
-            if not seg or CATEGORY_TOKEN_RE.match(seg):
+            if not seg or CATEGORY_TOKEN_RE.match(seg) or _VOCAB_ONLY_RE.match(seg):
                 continue
             if RATE_DATE_RE.search(seg) and not CORP_SUFFIX_RE.search(seg):
                 continue
@@ -367,6 +385,23 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
     return _strip_trailing_instrument(tokens[0])
 
 
+def head_stripped_words(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEAD_RE) -> list[str]:
+    """Words of the identifier after the category heads, cut at the first corporate suffix
+    ("... United States Space Technology Rocket Lab USA, Inc. Type of ..." ->
+    ['Space', 'Technology', 'Rocket', 'Lab', 'USA,', 'Inc.']); used to learn industry phrases."""
+    head = re.split(r"\s+[A-Z]{2,4}=", identifier)[0]
+    head = _WS.sub(" ", _PCT_RE.sub(" ", head)).strip()
+    stripped = strip_heads(head, industry_re)
+    # only identifiers that start with category text ("Portfolio Company Debt Securities- United
+    # States ...") can carry an untagged industry; a plain "New PLI Holdings, LLC" cannot
+    if stripped == head:
+        return []
+    m = CORP_SUFFIX_RE.search(stripped)
+    if not m:
+        return []
+    return stripped[: m.end()].split()
+
+
 def instrument_text(identifier: str, issuer: str) -> str:
     """The part of the identifier that describes the instrument (everything except the issuer).
     For pipe-delimited identifiers this is every segment other than the issuer segment; otherwise
@@ -386,6 +421,20 @@ def instrument_text(identifier: str, issuer: str) -> str:
         body = body.replace(_SUFFIX_COMMA_RE.sub(" ", issuer), " ")
     # category labels ("Debt and Equity Inv.", "Non-controlled ...") are not instrument words
     return strip_heads(_WS.sub(" ", body).strip(), _INDUSTRY_HEAD_RE)
+
+
+# "($80,704 par, due 7/2028)", "(EUR 40,905 par" -> 80704.0 (scale decided per filing in SQL)
+_PAR_RE = re.compile(r"\(\s*(?:[A-Z]{3}\s*)?\$?\s*([\d,]+(?:\.\d+)?)\s*par\b", re.IGNORECASE)
+
+
+def extract_par_amount(identifier: str) -> float | None:
+    m = _PAR_RE.search(identifier)
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
 
 
 def extract_maturity_text(identifier: str) -> str | None:
@@ -436,6 +485,12 @@ AGGREGATE_WHOLE_RE = re.compile(
     r"investments? in securities and cash equivalents?|cash( and cash)? equivalents?|"
     r"money market( funds?)?|short[- ]term investments?|largest portfolio company investments?|"
     r"top (five|ten|5|10) largest portfolio company investments?|investments?|net assets|"
+    r"(portfolio company )?portfolio investments?( and cash( and cash)? equivalents?)?|"
+    r"(portfolio company )?investments? in securities|investments? and cash equivalents?|"
+    r"investments? in (non-)?controlled,? (non-)?affiliated portfolio companies|"
+    r"investments?-?(non-)?controlled/(non-)?affiliated|investments? portfolio|"
+    r".{0,80}% of net assets|"
+    r"(total )?(debt|equity|warrant|senior secured|first lien|second lien|other) (investments?|securities)|"
     r"other assets( less|, net of)? (other )?liabilities|liabilities in excess of other assets)"
     r"[\s,\-–—]*(\(?-?\d+(\.\d+)?\s?%\)?)?\s*$",
     re.IGNORECASE,
@@ -482,6 +537,7 @@ class ParsedIdentifier:
     instrument_subtype: str | None
     is_debt: bool
     maturity_text: str | None
+    par_amount: float | None
     ident_key: str
     is_total_row: bool
 
@@ -511,7 +567,15 @@ def parse_identifier(identifier: str, extra_industries: tuple[str, ...] = ()) ->
     type_text = " ".join(v.replace("_", " ") for k, v in kv.items() if k in ("TYP", "STY"))
     issuer = extract_issuer(ident, industry_re)
     body = instrument_text(ident, issuer)
-    itype, is_debt = classify_instrument(type_text + " " + body)
+    itype, is_debt = "unknown", False
+    if "|" in ident:
+        for seg in instrument_text(ident, issuer).split("|"):
+            if seg.strip():
+                itype, is_debt = classify_instrument(seg)
+                if itype != "unknown":
+                    break
+    if itype == "unknown":
+        itype, is_debt = classify_instrument(type_text + " " + body)
     if itype == "unknown" and "|" not in ident:
         itype, is_debt = classify_instrument(ident)
     return ParsedIdentifier(
@@ -522,6 +586,7 @@ def parse_identifier(identifier: str, extra_industries: tuple[str, ...] = ()) ->
         instrument_subtype=classify_subtype(type_text + " " + body),
         is_debt=is_debt,
         maturity_text=extract_maturity_text(ident),
+        par_amount=extract_par_amount(ident),
         ident_key=ident_key(ident),
         is_total_row=looks_like_total(ident),
     )

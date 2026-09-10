@@ -12,6 +12,11 @@ from soi.config import BDC_REPORT_URL, COMPANY_TICKERS_URL, settings
 
 # Manual fixes where the SEC ticker file's first entry is not the common stock.
 TICKER_OVERRIDES: dict[int, str] = {}
+# CIKs the SEC ticker file lists although their shares do not trade on an exchange
+# (non-traded funds whose "ticker" is a fund code), so they are not screened against a price.
+NOT_EXCHANGE_TRADED: frozenset[int] = frozenset({
+    1923622,  # PGIM Private Credit Fund ("PGIM"): continuously offered, no listing
+})
 
 
 def _client() -> httpx.Client:
@@ -75,8 +80,9 @@ def build_reference(con: duckdb.DuckDBPyConnection, force_download: bool = False
         FROM read_csv('{report}', header=true, all_varchar=true)
         """
     )
+    not_listed = ", ".join(str(c) for c in sorted(NOT_EXCHANGE_TRADED)) or "-1"
     con.execute(
-        """
+        f"""
         CREATE OR REPLACE TABLE ref.bdc_master AS
         WITH filers AS (
             SELECT cik, any_value(name ORDER BY filed DESC) AS name,
@@ -97,7 +103,7 @@ def build_reference(con: duckdb.DuckDBPyConnection, force_download: bool = False
             FROM filers f FULL OUTER JOIN ref.bdc_report r ON f.cik = r.cik
         )
         SELECT u.cik, u.name, u.file_no, u.last_filed, l.ticker,
-               l.ticker IS NOT NULL AS is_public,
+               l.ticker IS NOT NULL AND u.cik NOT IN ({not_listed}) AS is_public,
                u.cik IN (SELECT cik FROM raw.sub) AS has_xbrl
         FROM universe u LEFT JOIN listed l ON u.cik = l.cik
         WHERE u.cik IS NOT NULL

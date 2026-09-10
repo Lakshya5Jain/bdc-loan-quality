@@ -34,9 +34,9 @@ def status():
     )
     recon = db.rows(
         """
-        SELECT CASE WHEN coverage IS NULL THEN 'no total'
-                    WHEN coverage BETWEEN 0.85 AND 1.15 THEN 'reconciles'
-                    WHEN coverage < 0.85 THEN 'under' ELSE 'over' END AS status,
+        SELECT CASE WHEN override_note IS NOT NULL OR coverage BETWEEN 0.90 AND 1.10 THEN 'reconciles'
+                    WHEN coverage IS NULL THEN 'no total'
+                    WHEN coverage < 0.90 THEN 'under' ELSE 'over' END AS status,
                count(*) AS n
         FROM core.reconciliation GROUP BY 1 ORDER BY 2 DESC
         """
@@ -176,17 +176,20 @@ def loan_detail(loan_id: str):
 
 
 @app.get("/api/borrowers")
-def borrowers(q: str = Query(..., min_length=2), limit: int = 50):
+def borrowers(q: str = Query("", max_length=80), limit: int = 50):
+    """Borrower search; with an empty query, the borrowers held by the most BDCs."""
     return db.rows(
         """
-        SELECT issuer_norm AS borrower_key, any_value(issuer_name) AS issuer_name,
+        SELECT issuer_norm AS borrower_key, mode(issuer_name) AS issuer_name,
                count(DISTINCT cik) AS n_bdcs, count(*) AS n_loans,
                max(last_period) AS last_period
         FROM core.loans
-        WHERE issuer_norm ILIKE '%' || ? || '%' OR issuer_name ILIKE '%' || ? || '%'
-        GROUP BY 1 ORDER BY n_bdcs DESC, n_loans DESC LIMIT ?
+        WHERE issuer_norm <> ''
+        GROUP BY 1
+        HAVING ? = '' OR borrower_key ILIKE '%' || ? || '%' OR issuer_name ILIKE '%' || ? || '%'
+        ORDER BY n_bdcs DESC, n_loans DESC, borrower_key LIMIT ?
         """,
-        [q, q, limit],
+        [q, q, q, limit],
     )
 
 
@@ -281,6 +284,27 @@ def sectors():
         ),
         "vintages": db.rows(
             "SELECT * FROM signals.vintage_quarter WHERE period_end = ? AND vintage >= 2019 ORDER BY vintage", [latest]
+        ),
+    }
+
+
+@app.get("/api/strategy")
+def strategy():
+    """The default strategy: its record by quarter, the live book, and headline statistics."""
+    return {
+        "summary": db.one("SELECT * FROM signals.strategy_summary"),
+        "periods": db.rows("SELECT * FROM signals.strategy_periods ORDER BY period_end"),
+        "book": db.rows(
+            """
+            SELECT cik, ticker, name, side, rank, n, health, period_end, filed, entry_date, close_entry, p_nav,
+                   pct_debt_below_90, pct_debt_below_95, debt_mark, nav_chg_4q,
+                   pct_debt_below_90_rank, pct_debt_below_95_rank, debt_mark_rank, nav_chg_4q_rank
+            FROM signals.strategy_latest ORDER BY rank
+            """
+        ),
+        "signals": db.rows(
+            "SELECT signal, n_periods, mean_ic, ic_tstat, ic_hit_rate, mean_spread_dir, ann_spread_net, avg_hold_days "
+            "FROM signals.bt_event_summary ORDER BY ic_tstat DESC"
         ),
     }
 

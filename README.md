@@ -71,8 +71,20 @@ are identical in both modes.
 
 ## Data notes
 
-- Only trust a BDC-period when `core.reconciliation.coverage` is between 0.85 and 1.15
+- Only trust a BDC-period when `core.reconciliation.coverage` is between 0.9 and 1.1, or `override_note` is set (a filing with no comparable reported total whose detail is 85-105% of total assets)
   (`data_ok` in the signals tables).
-- Amendments and prior-year comparatives duplicate periods; the pipeline keeps the latest
-  filing per (cik, period_end).
+- Amendments and prior-year comparatives duplicate periods; the pipeline keeps, per
+  (cik, period_end), the filing whose detail reconciles, then the filing's own period, then the
+  latest filed. Prior-period dates that carry only a handful of rows (affiliate roll-forward
+  tables) are dropped.
+- Filers that tag holdings as axis-member combinations instead of the identifier axis
+  (Horizon, Kayne Anderson BDC, Oxford Square, PhenixFIN, Palmer Square, Saratoga, SuRo,
+  TriplePoint before 2025) are read from the leaf member sets; their identifiers look like
+  `Issuer | Instrument | Industry`.
+- Only USD facts are used; several filers also tag local-currency amounts of foreign loans.
+- Where the SEC bulk data lists fewer holdings than the filing itself (Goldman Sachs BDC since
+  2025), `uv run soi ixfacts` reads the facts from the filing's inline XBRL and the pipeline uses
+  those for that filing-period.
+- Loans are linked quarter to quarter by identifier text, then by issuer + instrument, then by
+  issuer + debt/equity class, then by closest cost within an issuer, then fuzzy issuer names.
 - Non-accrual, PIK and amendment details come from XBRL footnotes and are parsed heuristically.
