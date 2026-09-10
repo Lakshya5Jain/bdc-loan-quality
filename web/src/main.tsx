@@ -19,6 +19,7 @@ import Scorecards from './pages/Scorecards'
 import Glossary from './pages/Glossary'
 import Method from './pages/Method'
 import StaleMarks from './pages/StaleMarks'
+import Neighbors from './pages/Neighbors'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -45,6 +46,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="scorecards" element={<Scorecards />} />
           <Route path="glossary" element={<Glossary />} />
           <Route path="stale-marks" element={<StaleMarks />} />
+          <Route path="neighbors" element={<Neighbors />} />
         </Route>
       </Routes>
     </BrowserRouter>

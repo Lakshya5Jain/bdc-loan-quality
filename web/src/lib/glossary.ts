@@ -1,5 +1,8 @@
 /** Plain-English definitions used for column tooltips and the Glossary page. */
 export const G: Record<string, string> = {
+  distress_event: 'The first quarter a borrower\'s mark (summed across every lender) drops below 0.90 or any lender puts it on non-accrual, after having been above 0.90 and accruing the quarter before.',
+  neighbor: 'A borrower still marked at 0.97 or better whose profile (lien, rate, spread, PIK, months to maturity, size, number of lenders, sector where known) is closest to what a borrower that just went bad looked like the quarter before it went bad.',
+  neighbor_distance: 'How far apart two borrowers\' profiles are, in standard deviations per feature, averaged over the features both have. 0.5 is a close match; above 1.5 is a loose one.',
   asset_coverage: 'Total assets minus non-debt liabilities, divided by debt: (net assets + debt) / debt. BDCs must keep it above 150%. Below that they cannot borrow more or pay dividends, so they must raise equity or sell loans.',
   coverage_distance: 'How many percentage points of asset coverage the BDC has above the 150% minimum. 20 points means coverage of 170%.',
   forced_seller: 'Flag: within 20 points of the 150% asset-coverage minimum AND the share of loans below 90 rose in each of the last two quarters. A BDC in that spot has little room to absorb more markdowns and may have to sell loans to stay compliant.',

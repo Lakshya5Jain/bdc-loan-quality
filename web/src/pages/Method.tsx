@@ -91,6 +91,17 @@ long book  = healthiest fifth      short book = sickest fifth      equal dollars
         </dl>
       </Section>
 
+      <Section title="8. Neighbours of distress">
+        <div className="prose"><p>When a borrower goes bad, the loans that look most like it are the ones to check next. Each borrower-quarter gets a profile from the tagged data, summed across every lender that holds it. Results and the current watchlist are on the <Link to="/neighbors">neighbours page</Link>.</p></div>
+        <dl className="defs">
+          <dt>profile</dt><dd>first-lien share of cost, cost-weighted rate and spread, PIK share, months to maturity, log of total cost, number of lenders, and a broad sector where any lender tagged an industry. Industry is tagged for only about 13% of borrower-quarters, so sector applies to a minority of matches.</dd>
+          <dt>distress event</dt><dd>the first quarter the borrower's mark falls below 0.90 or any lender flags non-accrual, after a quarter above 0.90 and accruing.</dd>
+          <dt>neighbours</dt><dd>the ten near-par borrowers (mark 0.97 or better) closest to the event borrower's profile from the quarter before it went bad. Features are standardised within the quarter; a pair needs at least three features in common; same-sector candidates come first when the sector is known. The mark is not part of the distance.</dd>
+          <dt>controls</dt><dd>ten borrowers drawn at random from the same near-par pool with the same lien bucket, so the comparison is "similar profile" against "any other clean loan".</dd>
+          <dt>the test</dt><dd>share of neighbours whose mark fell below 0.95 within four quarters, against the same share for controls. A pair counts only if the neighbour was seen again at least nine months later or fell first. The 95% interval comes from resampling events, since one event contributes ten pairs.</dd>
+        </dl>
+      </Section>
+
     </div>
   )
 }

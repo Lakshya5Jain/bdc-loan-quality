@@ -123,20 +123,32 @@ def build_forced_cmd():
         typer.echo(build_forced_sellers(con, log=typer.echo))
 
 
+@build_app.command("neighbors")
+def build_neighbors_cmd():
+    """Neighbours of distress: near-par borrowers that look like ones that just went bad."""
+    from soi.db import db
+    from soi.signals.neighbors import build_neighbors
+
+    with db() as con:
+        typer.echo(build_neighbors(con, log=typer.echo))
+
+
 @build_app.command("all")
 def build_all():
     from soi.db import db
     from soi.signals.bdc_rollup import build_signals
+    from soi.signals.forced_sellers import build_forced_sellers
     from soi.signals.fundamentals import build_fundamentals
     from soi.signals.insights import build_insights
     from soi.signals.market import build_screen
+    from soi.signals.neighbors import build_neighbors
     from soi.signals.stale_marks import build_stale_marks
     from soi.transform.holdings import build_holdings
     from soi.transform.link_loans import build_loans
 
     with db() as con:
         for step in (build_holdings, build_loans, build_signals, build_fundamentals, build_screen, build_insights,
-                     build_stale_marks):
+                     build_stale_marks, build_forced_sellers, build_neighbors):
             typer.echo(step(con))
 
 

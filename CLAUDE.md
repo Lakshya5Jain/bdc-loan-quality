@@ -21,6 +21,8 @@ uv run soi prices                  # yfinance for public tickers + market.nav
 uv run soi ixfootnotes --since 2026-06-30   # footnote links from the filings (non-accrual, PIK)
 uv run soi ixfacts                 # holdings facts from the filings where bulk data misses rows
 uv run soi backtest                # walk-forward backtest of BDC-level signals on public stock returns
+uv run soi build lab               # strategy variants (floors, borrow cost, residual, extra inputs); needs backtest first
+uv run soi build stale|forced|neighbors   # stale marks, forced-seller flags, neighbours of distress (also in build all)
 uv run soi serve                   # or: uv run uvicorn api.main:app --port 8000
 npm --prefix web run dev           # http://localhost:5173
 uv run pytest                      # parser unit tests + smoke tests against data/soi.duckdb
@@ -64,5 +66,7 @@ Set `SEC_USER_AGENT="Name email"` in `.env` (SEC requires it).
   `core.holdings_excluded`, `core.holdings_jv`, `core.reconciliation`), `core.loans` + `core.loan_history`
   (loan_id stable across quarters), `signals.loan_quarter`, `signals.bdc_quarter`, `signals.bdc_latest`,
   `signals.migration`, `signals.borrower_marks`, `signals.bdc_generosity`, `market.prices`, `market.nav`,
-  `market.screen`, `signals.bdc_fundamentals` (NII, coverage, leverage, NAV trend), `signals.bt_*` (backtest).
+  `market.screen`, `signals.bdc_fundamentals` (NII, coverage, leverage, NAV trend), `signals.bt_*` (backtest),
+  `signals.stale_*` (lender disagreement, generosity), `signals.lab_*` (strategy variants), `signals.forced_seller*`
+  (asset coverage flags), `signals.nbr_*` (neighbours of distress). All additive: the default strategy tables never change.
 - Only trust a BDC-period when `core.reconciliation.coverage` is 0.9-1.1 or `override_note` is set (`data_ok` in signals).

@@ -9,6 +9,7 @@ const GROUPS: { title: string; terms: [string, string][] }[] = [
     ['first_lien', 'First lien, second lien, subordinated, equity'], ['nonaccrual', 'Non-accrual'], ['pik', 'PIK'],
     ['spread', 'Spread'], ['spread_up', 'Spread up'], ['extended', 'Extended'], ['vintage', 'Vintage'],
     ['risk', 'Loan risk score'], ['mark_vs_peers', 'Mark vs peers'],
+    ['distress_event', 'Distress event'], ['neighbor', 'Neighbour of distress'], ['neighbor_distance', 'Neighbour distance'],
   ] },
   { title: 'A BDC\'s book', terms: [
     ['debt_below_90', 'Loans below 90'], ['debt_below_95', 'Loans below 95'], ['debt_mark', 'Average mark'],

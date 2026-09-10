@@ -366,3 +366,28 @@ def test_forced_seller_tables(con):
     assert tests
     for _, lo, hi, d in tests:
         assert lo <= d <= hi
+
+
+def test_neighbor_tables(con):
+    # events are transitions: above 0.90 and accruing the quarter before, bad at the event
+    bad = con.execute(
+        "SELECT count(*) FROM signals.nbr_events WHERE prior_mark < 0.90 OR NOT (event_mark < 0.90 OR event_nonaccrual)"
+    ).fetchone()[0]
+    assert bad == 0
+    # neighbours are near par at the event quarter, ranked 1..10, never the event borrower itself
+    bad = con.execute(
+        """
+        SELECT count(*) FROM signals.nbr_pairs
+        WHERE neighbor_mark_t < 0.97 OR rank < 1 OR rank > 10 OR neighbor_key = borrower_key
+           OR (NOT is_control AND distance IS NULL)
+        """
+    ).fetchone()[0]
+    assert bad == 0
+    # a hit means the neighbour was seen below 0.95 within the window, and is therefore observed
+    bad = con.execute("SELECT count(*) FROM signals.nbr_pairs WHERE hit AND NOT observed").fetchone()[0]
+    assert bad == 0
+    t = con.execute(
+        "SELECT n_events, neighbor_hit_rate, control_hit_rate, ci_lo, ci_hi, diff FROM signals.nbr_test WHERE group_name = 'all events'"
+    ).fetchone()
+    assert t and t[0] >= 200 and 0 <= t[1] <= 1 and 0 <= t[2] <= 1 and t[3] <= t[5] <= t[4]
+    assert con.execute("SELECT count(*) FROM signals.nbr_watchlist").fetchone()[0] > 0

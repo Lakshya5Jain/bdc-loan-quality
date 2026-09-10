@@ -397,6 +397,25 @@ def lab():
     }
 
 
+@app.get("/api/neighbors")
+def neighbors():
+    """Neighbours of distress: the test, and the current watchlist of near-par borrowers that
+    resemble ones that just went bad, with their holders."""
+    return {
+        "test": db.rows("SELECT * FROM signals.nbr_test"),
+        "counts": db.one(
+            """
+            SELECT (SELECT count(*) FROM signals.nbr_events) AS n_events,
+                   (SELECT count(*) FROM signals.nbr_pairs WHERE NOT is_control) AS n_neighbor_pairs,
+                   (SELECT count(*) FROM signals.nbr_features WHERE sector IS NOT NULL) * 1.0
+                       / (SELECT count(*) FROM signals.nbr_features) AS sector_known_share,
+                   (SELECT max(period_end) FROM signals.nbr_features) AS latest_period
+            """
+        ),
+        "watchlist": db.rows("SELECT * FROM signals.nbr_watchlist ORDER BY event_period DESC, event_key, rank LIMIT 1500"),
+    }
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
