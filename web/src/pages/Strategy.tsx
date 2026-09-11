@@ -158,7 +158,7 @@ export function Results() {
               {v2m && <> At a $2m floor the book is cheaper to run and made {signedPct(v2m.mean_net)} net, {v2m.quarters_won} of {v2m.n_quarters} quarters positive before costs.</>}
               {vres && <> With price / NAV removed the score still worked in {vres.quarters_won} of {vres.n_quarters} quarters at {signedPct(vres.mean_gross)} gross (t-stat {num(vres.gross_tstat, 1)}), so most of the edge is information the price does not carry, with some value tilt.</>}
               {vgen && <> Adding generosity as a fifth input {vgen.mean_gross >= vdef.mean_gross ? 'raised' : 'lowered'} the average to {signedPct(vgen.mean_gross)} and moved the worst quarter to {signedPct(vgen.worst_gross)}.</>}
-              {' '}The loan warning score as a fifth input did not help. None of these variants changes the default strategy; they are shown so the trade-offs are visible.</p>
+              {' '}The loan warning score is strong on its own (table below) but adds nothing as a fifth input, because it is built from the same marks the score already uses. None of these variants changes the default strategy; they are shown so the trade-offs are visible.</p>
           </Explain>
           <div className="panel">
             <DataTable data={lab.data.variants} columns={[
@@ -202,7 +202,7 @@ export function Results() {
 
       {lab.data && lab.data.signals.length > 0 && (
         <Section title="Extra inputs on their own">
-          <p className="sub">Tested exactly like the signals above. Generosity comes from the <Link to="/stale-marks">stale marks</Link> work; the two loan-score roll-ups are refitted every quarter on outcomes already known by then ({G.risk_wf.toLowerCase()}).</p>
+          <p className="sub">Tested exactly like the signals above. Generosity comes from the <Link to="/stale-marks">stale marks</Link> work. The two loan-score roll-ups take every loan's warning score, refitted each quarter using only outcomes already known by then, and summarise a BDC as the cost-weighted average score and the share of cost scored 30 or more. They rank well on their own but overlap almost entirely with the mark inputs already in the score.</p>
           <div className="panel">
             <DataTable data={lab.data.signals} columns={[
               { header: 'Signal', accessorKey: 'signal', left: true, cell: (c) => LAB_SIGNAL_LABEL[c.getValue<string>()] ?? c.getValue<string>() },
@@ -222,7 +222,7 @@ export function Results() {
           <li><b>One credit cycle.</b> Fifteen quarters of history, from late 2022. Different markets may behave differently.</li>
           <li><b>Small books.</b> Each side holds about nine stocks, so one blow-up moves a quarter.</li>
           <li><b>Missing names.</b> BDCs bought out or delisted since 2022 are not in the test. Their price history is not freely available.</li>
-          <li><b>Costs.</b> Returns are before trading costs and before the cost of borrowing stock to short; the annualised column in the signal table charges 40 basis points per round trip and nothing for borrow.</li>
+          <li><b>Costs.</b> The headline figures are before trading costs and before the cost of borrowing stock to short. The variants table above charges both; read the net columns there for what a fund would keep.</li>
           <li><b>Not advice.</b> This is a research tool. Every number links back to the loans behind it: click a ticker.</li>
         </ul>
       </Explain>

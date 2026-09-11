@@ -1,6 +1,6 @@
 """Neighbours of distress: when a borrower goes bad, which near-par borrowers look like it?
 
-Borrower-quarter feature vector (debt positions only, quarters that passed the data check,
+Borrower-quarter feature vector (debt positions only, structured products excluded, quarters that passed the data check,
 summed across every lender holding the borrower): first-lien share of cost, cost-weighted
 rate, spread, PIK share, months to maturity, log10 of total cost, number of lenders, the
 cost-weighted mark, and a broad sector where any lender tagged an industry (about 13% of
@@ -83,6 +83,13 @@ def _features(con: duckdb.DuckDBPyConnection) -> None:
             WHERE is_debt AND data_ok AND cost > 0 AND fair_value IS NOT NULL
               AND issuer_norm <> '' AND length(issuer_norm) >= 4
               AND fair_value / cost BETWEEN 0 AND 1.25
+              -- CLO tranches, JVs and funds are not loans to a company: their marks move for
+              -- other reasons and they would dominate both the events and the neighbours
+              AND instrument_type <> 'structured'
+              -- CLO tranches tagged as plain notes ("MAGNE 2020-28", "CIFC 2025-3 CLO")
+              -- matched on the normalised key so spacing and suffix variants are caught too
+              AND NOT regexp_matches(issuer_norm, '^[a-z0-9]{{2,8}} [0-9]{{4}} [0-9]{{1,2}}[a-z]?( |$)')
+              AND NOT regexp_matches(issuer_norm, '(^| )clo( |$)')
         ),
         ind AS (
             -- the industry most often tagged for the borrower by any lender in any quarter
