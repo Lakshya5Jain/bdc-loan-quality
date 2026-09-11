@@ -83,8 +83,19 @@ def bdcs(public_only: bool = False):
     )
 
 
-@app.get("/api/bdcs/{cik}")
-def bdc_detail(cik: int):
+def _resolve_cik(key: str | int) -> int:
+    """A BDC may be addressed by CIK or by ticker (/bdcs/MSDL)."""
+    if isinstance(key, int) or key.isdigit():
+        return int(key)
+    row = db.one("SELECT cik FROM ref.bdc_master WHERE upper(ticker) = upper(?)", [key])
+    if not row:
+        raise HTTPException(404, "unknown BDC")
+    return row["cik"]
+
+
+@app.get("/api/bdcs/{key}")
+def bdc_detail(key: str):
+    cik = _resolve_cik(key)
     bdc = db.one("SELECT cik, name, ticker, is_public, file_no FROM ref.bdc_master WHERE cik = ?", [cik])
     if not bdc:
         raise HTTPException(404, "unknown BDC")
@@ -123,13 +134,14 @@ def bdc_detail(cik: int):
             "screen": screen_row, "scorecard": scorecard, "forced_seller": forced, "forced_seller_test": forced_test}
 
 
-@app.get("/api/bdcs/{cik}/loans")
+@app.get("/api/bdcs/{key}/loans")
 def bdc_loans(
-    cik: int,
+    key: str,
     period: str | None = None,
     flag: str | None = Query(None, description="stressed|nonaccrual|new_nonaccrual|markdown|new|pik|all"),
     limit: int = 5000,
 ):
+    cik = _resolve_cik(key)
     if period is None:
         p = db.one("SELECT max(period_end) AS p FROM core.holdings WHERE cik = ?", [cik])
         if not p or not p["p"]:
@@ -149,7 +161,10 @@ def bdc_loans(
     return db.rows(
         f"""
         SELECT loan_id, match_method, identifier, issuer_name, issuer_norm, instrument_type,
-               instrument_subtype, is_debt, industry, fair_value, cost, principal, mark, prev_mark,
+               instrument_subtype, is_debt, industry, fair_value, cost, principal,
+               -- a mark on a near-zero cost, or outside 0 to 1.5, is a filing artefact, not a valuation
+               CASE WHEN cost >= 1000 AND mark BETWEEN 0 AND 1.5 THEN mark END AS mark,
+               CASE WHEN prev_cost >= 1000 AND prev_mark BETWEEN 0 AND 1.5 THEN prev_mark END AS prev_mark,
                mark_chg, mark_bucket, prev_bucket, rate, spread, floor_rate, pik_rate, maturity,
                nonaccrual_flag, new_nonaccrual, pik_flag, new_pik, spread_up, maturity_extended,
                converted_to_equity, is_stressed, is_new, obs_n, footnote_text

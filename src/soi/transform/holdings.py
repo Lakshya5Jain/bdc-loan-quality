@@ -1,6 +1,8 @@
 """Build core.filings and core.holdings: one row per (BDC, period end, holding)."""
 from __future__ import annotations
 
+import re
+
 import duckdb
 import polars as pl
 
@@ -325,9 +327,13 @@ def _learn_industry_phrases(rows: list[tuple[int, str]]) -> list[str]:
                 continue
             if any(w.lower().strip(",") in _PHRASE_STOP for w in prefix.split()):
                 continue
-            # count distinct issuers, not distinct spellings: "Blackbird Purchaser, Inc." and
-            # "Blackbird Purchaser, Inc" must not make "Blackbird" look like an industry
-            tails[(cik, prefix)].add(normalize_issuer(" ".join(words[k:])))
+            # count distinct companies, not distinct spellings: "Blackbird Purchaser, Inc.",
+            # "Blackbird Purchaser, Inc 2" and "Higginbotham Insurance Agency Inc., HIG Operations
+            # Holdings Inc." are one company each, so only the first word of the normalised tail
+            # counts, and a tail that normalises to nothing counts for nothing
+            tail = normalize_issuer(re.sub(r"\s+\d{1,3}$", "", " ".join(words[k:])))
+            if tail:
+                tails[(cik, prefix)].add(tail.split()[0])
     learned = {prefix for (_, prefix), t in tails.items() if len(t) >= 3}
     return sorted(learned, key=len, reverse=True)
 
@@ -692,9 +698,12 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
     # industry vocabulary observed in tagged data helps strip industry names from identifiers
     extra_industries = tuple(
         r[0] for r in con.execute(
+            # a filer that tags a company name as its "industry" must not turn that name into a
+            # heading that gets stripped from every identifier ("Tivity Health" -> "Inc.")
             "SELECT industry_name FROM (SELECT coalesce(industry_name, regexp_replace(industry_enum, '^.*[#:]', '')) "
-            "AS industry_name, count(*) n FROM pivot_txt GROUP BY 1) "
-            "WHERE industry_name IS NOT NULL AND length(industry_name) BETWEEN 4 AND 60 AND n >= 2"
+            "AS industry_name, count(DISTINCT identifier) n FROM pivot_txt GROUP BY 1) "
+            "WHERE industry_name IS NOT NULL AND length(industry_name) BETWEEN 4 AND 60 AND n >= 3 "
+            "AND NOT regexp_matches(industry_name, '(?i)\\b(inc|llc|corp|corporation|ltd|lp|l\\.p\\.|holdings?|co|company|group|partners)\\b')"
         ).fetchall()
     )
     learned = _learn_industry_phrases(

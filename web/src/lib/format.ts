@@ -36,3 +36,11 @@ export const cls = (v: number | null | undefined, invert = false) => {
 export const bucketLabel: Record<string, string> = {
   '1_ge98': '≥98', '2_95_98': '95–98', '3_90_95': '90–95', '4_80_90': '80–90', '5_lt80': '<80',
 }
+
+/** "//fasb.org/us-gaap/2026#HealthcareSectorMember" -> "Healthcare"; free text passes through title-cased. */
+export const industryLabel = (v: string | null | undefined): string => {
+  if (!v) return ''
+  let t = v.includes('#') ? v.slice(v.lastIndexOf('#') + 1) : v
+  t = t.replace(/(Sector|Industry)?Member$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+  return titleCase(t.trim())
+}

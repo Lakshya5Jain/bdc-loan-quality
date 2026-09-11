@@ -235,7 +235,9 @@ def build_borrower_marks(con: duckdb.DuckDBPyConnection) -> None:
                    bool_or(nonaccrual_flag) AS nonaccrual
             FROM signals.loan_quarter
             WHERE is_debt AND data_ok AND issuer_norm <> '' AND length(issuer_norm) >= 4
-                  AND cost > 0
+                  AND cost > 0 AND fair_value IS NOT NULL
+                  -- a debt position marked outside 0 to 1.25 is a unit error in the filing
+                  AND fair_value / cost BETWEEN 0 AND 1.25
             GROUP BY 1, 2, 3, 4
         ),
         peers AS (

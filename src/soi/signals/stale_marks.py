@@ -2,7 +2,8 @@
 marks its shared borrowers above the other lenders pays for it later.
 
 Unit of comparison: one borrower, one lien type (first lien, second lien, ...), one quarter,
-held by two or more BDCs whose quarter passed the reconciliation gate. Each lender's position
+held by two or more BDCs under different managers (sister vehicles of one sponsor share a
+valuation committee and are folded into one opinion) whose quarter passed the reconciliation gate. Each lender's position
 is summed to one mark (fair value / cost). Comparing across lien types would mix a first lien
 at par with a second lien at 60, so the split is by instrument type.
 
@@ -41,7 +42,68 @@ OUTCOMES = {
 }
 
 
+# One valuation committee per manager: vehicles of the same sponsor do not give independent
+# opinions. (regex on the lower-cased name, manager key). Anything unmatched keys on the first
+# word of its name, which groups "ARES CAPITAL CORP" with "ARES STRATEGIC INCOME FUND".
+MANAGER_ALIASES: list[tuple[str, str]] = [
+    (r"goldman|phillip street|west bay", "goldman"),
+    (r"morgan stanley|north haven|^t series|^sl investment|^lgam", "morgan stanley"),
+    (r"blue owl|owl rock", "blue owl"),
+    (r"^fs |kkr", "fs kkr"),
+    (r"main street|^msc income", "main street"),
+    (r"apollo|midcap financial", "apollo"),
+    (r"nuveen|churchill|^nc private", "churchill"),
+    (r"kayne", "kayne"),
+    (r"bc partners|^bcp ", "bc partners"),
+    (r"franklin bsp|^fblc|benefit street", "franklin bsp"),
+    (r"t\. rowe|^oha ", "oha"),
+    (r"blackstone|^bxsl", "blackstone"),
+    (r"golub", "golub"),
+    (r"carlyle", "carlyle"),
+    (r"new mountain", "new mountain"),
+    (r"bain capital", "bain"),
+    (r"oaktree", "oaktree"),
+    (r"sixth street", "sixth street"),
+    (r"pennantpark", "pennantpark"),
+    (r"barings", "barings"),
+    (r"crescent", "crescent"),
+    (r"triplepoint", "triplepoint"),
+    (r"hercules", "hercules"),
+    (r"palmer square", "palmer square"),
+    (r"stellus", "stellus"),
+    (r"monroe", "monroe"),
+    (r"antares", "antares"),
+    (r"hps ", "hps"),
+    (r"ares ", "ares"),
+    (r"gladstone", "gladstone"),
+    (r"prospect", "prospect"),
+    (r"saratoga", "saratoga"),
+    (r"fidelity", "fidelity"),
+    (r"first eagle", "first eagle"),
+    (r"lord abbett", "lord abbett"),
+    (r"kennedy lewis", "kennedy lewis"),
+    (r"vista credit", "vista"),
+    (r"jefferies", "jefferies"),
+    (r"diameter", "diameter"),
+    (r"stone point", "stone point"),
+    (r"tcw", "tcw"),
+    (r"overland", "overland"),
+    (r"north haven", "morgan stanley"),
+]
+
+
+def _manager_sql() -> str:
+    cases = "\n".join(f"WHEN regexp_matches(lower(name), '{pat}') THEN '{key}'" for pat, key in MANAGER_ALIASES)
+    return f"CASE {cases} ELSE split_part(lower(regexp_replace(name, '^the ', '', 'i')), ' ', 1) END"
+
+
 def build_stale_marks(con: duckdb.DuckDBPyConnection, log=print) -> str:
+    con.execute(
+        f"""
+        CREATE OR REPLACE TABLE signals.bdc_manager AS
+        SELECT cik, name, ticker, {_manager_sql()} AS manager FROM ref.bdc_master
+        """
+    )
     con.execute(
         f"""
         CREATE OR REPLACE TABLE signals.stale_borrowers AS
@@ -58,47 +120,73 @@ def build_stale_marks(con: duckdb.DuckDBPyConnection, log=print) -> str:
             GROUP BY 1, 2, 3, 4
         ),
         named AS (
-            SELECT h.*, coalesce(m.ticker, m.name) AS lender, m.is_public
-            FROM h JOIN ref.bdc_master m USING (cik)
+            SELECT h.*, coalesce(m.ticker, m.name) AS lender, m.is_public, mg.manager
+            FROM h JOIN ref.bdc_master m USING (cik) JOIN signals.bdc_manager mg USING (cik)
+        ),
+        -- one opinion per manager: vehicles of the same sponsor share a valuation committee
+        by_mgr AS (
+            SELECT borrower_key, period_end, instrument_type, manager,
+                   sum(fv) / sum(cost) AS mark, sum(cost) AS cost,
+                   arg_min(cik, mark) AS low_cik, arg_min(lender, mark) AS low_lender,
+                   arg_max(cik, mark) AS high_cik, arg_max(lender, mark) AS high_lender
+            FROM named GROUP BY 1, 2, 3, 4
+        ),
+        mgr_span AS (
+            SELECT borrower_key, period_end, instrument_type,
+                   count(*) AS n_managers,
+                   min(mark) AS low_mark, max(mark) AS high_mark,
+                   arg_min(low_cik, mark) AS low_cik, arg_min(low_lender, mark) AS low_lender,
+                   arg_max(high_cik, mark) AS high_cik, arg_max(high_lender, mark) AS high_lender
+            FROM by_mgr GROUP BY 1, 2, 3
         )
-        SELECT borrower_key, period_end, instrument_type,
-               any_value(issuer_name) AS issuer_name, any_value(industry) AS industry,
-               count(*) AS n_bdcs, count(*) FILTER (WHERE is_public) AS n_public,
-               sum(cost) AS total_cost, sum(fv) / sum(cost) AS wavg_mark,
-               min(mark) AS low_mark, max(mark) AS high_mark, max(mark) - min(mark) AS gap,
-               arg_min(cik, mark) AS low_cik, arg_min(lender, mark) AS low_lender,
-               arg_max(cik, mark) AS high_cik, arg_max(lender, mark) AS high_lender,
-               bool_or(nonaccrual) AS any_nonaccrual, count(*) FILTER (WHERE nonaccrual) AS n_nonaccrual,
-               string_agg(lender || ' ' || format('{{:.2f}}', mark), ', ' ORDER BY mark) AS lenders
-        FROM named
+        SELECT n.borrower_key, n.period_end, n.instrument_type,
+               any_value(n.issuer_name) AS issuer_name, any_value(n.industry) AS industry,
+               count(*) AS n_bdcs, count(*) FILTER (WHERE n.is_public) AS n_public,
+               any_value(ms.n_managers) AS n_managers,
+               sum(n.cost) AS total_cost, sum(n.fv) / sum(n.cost) AS wavg_mark,
+               any_value(ms.low_mark) AS low_mark, any_value(ms.high_mark) AS high_mark,
+               any_value(ms.high_mark - ms.low_mark) AS gap,
+               any_value(ms.low_cik) AS low_cik, any_value(ms.low_lender) AS low_lender,
+               any_value(ms.high_cik) AS high_cik, any_value(ms.high_lender) AS high_lender,
+               bool_or(n.nonaccrual) AS any_nonaccrual, count(*) FILTER (WHERE n.nonaccrual) AS n_nonaccrual,
+               string_agg(n.lender || ' ' || format('{{:.2f}}', n.mark), ', ' ORDER BY n.mark) AS lenders
+        FROM named n JOIN mgr_span ms USING (borrower_key, period_end, instrument_type)
         GROUP BY 1, 2, 3
-        HAVING count(*) >= 2
+        HAVING count(*) >= 2 AND any_value(ms.n_managers) >= 2
         """
     )
     con.execute(
         f"""
         CREATE OR REPLACE TABLE signals.stale_bdc AS
         WITH h AS (
-            SELECT q.issuer_norm AS borrower_key, q.cik, q.period_end, q.instrument_type,
+            SELECT q.issuer_norm AS borrower_key, q.cik, q.period_end, q.instrument_type, mg.manager,
                    sum(q.fair_value) AS fv, sum(q.cost) AS cost,
                    q.issuer_norm <> '' AND length(q.issuer_norm) >= 4 AS matchable
-            FROM signals.loan_quarter q
+            FROM signals.loan_quarter q JOIN signals.bdc_manager mg USING (cik)
             WHERE q.is_debt AND q.data_ok AND q.cost > 0 AND q.fair_value IS NOT NULL
               AND q.fair_value / q.cost BETWEEN {MARK_LO} AND {MARK_HI}
-            GROUP BY 1, 2, 3, 4, matchable
+            GROUP BY 1, 2, 3, 4, 5, matchable
         ),
         unit AS (
             SELECT borrower_key, period_end, instrument_type,
-                   count(*) AS n_bdcs, sum(fv) AS unit_fv, sum(cost) AS unit_cost
+                   count(DISTINCT manager) AS n_managers, sum(fv) AS unit_fv, sum(cost) AS unit_cost
             FROM h WHERE matchable GROUP BY 1, 2, 3
         ),
+        own_mgr AS (
+            SELECT borrower_key, period_end, instrument_type, manager,
+                   sum(fv) AS mgr_fv, sum(cost) AS mgr_cost
+            FROM h WHERE matchable GROUP BY 1, 2, 3, 4
+        ),
         shared AS (
-            -- the other lenders' cost-weighted mark on the same borrower and lien type
+            -- the OTHER MANAGERS' cost-weighted mark on the same borrower and lien type; sister
+            -- vehicles of the same sponsor are not a second opinion
             SELECT h.cik, h.period_end, h.cost, h.fv,
-                   (u.unit_fv - h.fv) / nullif(u.unit_cost - h.cost, 0) AS peer_mark,
+                   (u.unit_fv - o.mgr_fv) / nullif(u.unit_cost - o.mgr_cost, 0) AS peer_mark,
                    h.fv / h.cost AS own_mark
-            FROM h JOIN unit u USING (borrower_key, period_end, instrument_type)
-            WHERE u.n_bdcs >= 2 AND h.matchable
+            FROM h
+            JOIN unit u USING (borrower_key, period_end, instrument_type)
+            JOIN own_mgr o USING (borrower_key, period_end, instrument_type, manager)
+            WHERE u.n_managers >= 2 AND h.matchable
         ),
         per_bdc AS (
             SELECT cik, period_end,

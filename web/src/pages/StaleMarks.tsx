@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom'
 import DataTable, { Col } from '../components/DataTable'
 import { Explain, PageHeader, Section } from '../components/Page'
 import { useApi } from '../lib/api'
-import { cls, mm, num, pct, signedPct, titleCase } from '../lib/format'
+import { cls, industryLabel, mm, num, pct, signedPct, titleCase } from '../lib/format'
 import { G } from '../lib/glossary'
 
 type Summary = { outcome: string; expected_for_generous: string; n_quarters: number; mean_spread: number; spread_tstat: number | null; hit_rate: number; mean_ic: number | null; ic_tstat: number | null; ic_hit_rate: number | null }
 type Period = { qtr: string; outcome: string; n: number; k: number; top_mean: number; bottom_mean: number; spread: number; ic: number | null; top_b90_now: number | null; bottom_b90_now: number | null; top_names: string; bottom_names: string }
 type Bdc = { cik: number; ticker: string | null; name: string; is_public: boolean; period_end: string; debt_cost: number; n_shared: number; shared_cost_share: number | null; no_second_opinion_share: number | null; own_mark_shared: number | null; peer_mark_shared: number | null; generosity: number | null; generosity_4q: number | null; n_above_5: number; n_below_5: number }
-type Borrower = { borrower_key: string; period_end: string; instrument_type: string; issuer_name: string; industry: string | null; n_bdcs: number; n_public: number; total_cost: number; wavg_mark: number; low_mark: number; high_mark: number; gap: number; low_cik: number; low_lender: string; high_cik: number; high_lender: string; any_nonaccrual: boolean; n_nonaccrual: number; lenders: string }
+type Borrower = { borrower_key: string; period_end: string; instrument_type: string; issuer_name: string; industry: string | null; n_bdcs: number; n_public: number; n_managers: number; total_cost: number; wavg_mark: number; low_mark: number; high_mark: number; gap: number; low_cik: number; low_lender: string; high_cik: number; high_lender: string; any_nonaccrual: boolean; n_nonaccrual: number; lenders: string }
 type D = { latest_period: string; summary: Summary[]; periods: Period[]; bdcs: Bdc[]; borrowers: Borrower[] }
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -88,9 +88,10 @@ export default function StaleMarks() {
   ]
   const borCols: Col<Borrower>[] = [
     { header: 'Borrower', accessorKey: 'issuer_name', left: true, cell: (c) => <Link to={`/borrowers/${encodeURIComponent(c.row.original.borrower_key)}`}>{c.getValue<string>()}</Link> },
-    { header: 'Industry', accessorKey: 'industry', left: true, cell: (c) => titleCase(c.getValue<string | null>()) },
+    { header: 'Industry', accessorKey: 'industry', left: true, cell: (c) => industryLabel(c.getValue<string | null>()) },
     { header: 'Lien', accessorKey: 'instrument_type', left: true, cell: (c) => c.getValue<string>().replace('_', ' ') },
     { header: 'Lenders', accessorKey: 'n_bdcs' },
+    { header: 'Managers', accessorKey: 'n_managers', tip: 'Distinct sponsors among the lenders. Vehicles of one sponsor share a valuation committee and count as one opinion; the gap is measured across managers.' },
     { header: 'Total cost', accessorKey: 'total_cost', cell: (c) => mm(c.getValue<number>()) },
     { header: 'Lowest mark', accessorKey: 'low_mark', cell: (c) => num(c.getValue<number>(), 2) },
     { header: 'By', accessorKey: 'low_lender', left: true, cell: (c) => <Link to={`/bdcs/${c.row.original.low_cik}`}>{titleCase(c.getValue<string>())}</Link> },
@@ -105,7 +106,7 @@ export default function StaleMarks() {
     <div>
       <PageHeader eyebrow="Explore" title="Stale marks" lede="The same loan, valued by different lenders. When two BDCs hold the same borrower and disagree, at least one of them is wrong, and the more generous one is usually late. This page lists the biggest disagreements, scores every BDC on how it marks shared loans against the other lenders, and tests whether generous marking predicts trouble." />
       <Explain>
-        <p><b>How to read this.</b> A <b>gap</b> is the highest lender's mark minus the lowest on the same borrower and lien type in the same quarter. <b>Generosity</b> is a BDC's cost-weighted mark on its shared loans minus what the other lenders mark those same loans: +0.02 means two cents above the crowd. <b>No second opinion</b> is the share of a BDC's debt book in borrowers nobody else holds, where there is no crowd to check against. Positions marked outside 0 to 1.25 are dropped as unit errors in the filing. One caveat: funds run by the same manager (Goldman Sachs BDC and Goldman's private credit vehicles, for example) share a valuation committee, so a gap between them is a bookkeeping difference, not two opinions; the independent disagreements are the ones between different managers.</p>
+        <p><b>How to read this.</b> A <b>gap</b> is the highest lender's mark minus the lowest on the same borrower and lien type in the same quarter. <b>Generosity</b> is a BDC's cost-weighted mark on its shared loans minus what the other lenders mark those same loans: +0.02 means two cents above the crowd. <b>No second opinion</b> is the share of a BDC's debt book in borrowers nobody else holds, where there is no crowd to check against. Positions marked outside 0 to 1.25 are dropped as unit errors in the filing. Vehicles run by the same sponsor (Goldman Sachs BDC and Goldman's private credit funds, for example) share a valuation committee, so they are folded into one opinion: the gap and the generosity figures are measured across managers, and a borrower needs lenders from at least two sponsors to appear.</p>
       </Explain>
 
       <Section title="Does generous marking predict trouble?" meta={`${data.summary[0]?.n_quarters ?? 0} quarters · liquid public BDCs with 5+ shared positions`}>

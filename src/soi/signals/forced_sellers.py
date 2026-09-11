@@ -47,9 +47,9 @@ def build_forced_sellers(con: duckdb.DuckDBPyConnection, log=print) -> str:
             SELECT b.cik, b.period_end, b.data_ok, b.pct_debt_below_90, b.debt_cost,
                    t.v AS coverage_tagged,
                    -- computed only when the debt tag looks complete: a BDC with debt under 40% of
-                   -- net assets has almost always tagged one facility, not its borrowings
-                   -- (Kayne Anderson BDC came out at 561% that way); no BDC runs above 300%
-                   CASE WHEN f.debt > 0 AND f.net_assets > 0 AND f.debt / f.net_assets >= 0.4
+                   -- net assets has almost always tagged one facility, not its borrowings (Kayne
+                   -- Anderson BDC came out at 561%, PennantPark 238%, Gladstone Capital 287%)
+                   CASE WHEN f.debt > 0 AND f.net_assets > 0 AND f.debt / f.net_assets >= 0.8
                              AND (f.net_assets + f.debt) / f.debt BETWEEN 1.2 AND 3.0
                         THEN (f.net_assets + f.debt) / f.debt END AS coverage_computed,
                    lag(b.pct_debt_below_90, 1) OVER w AS b90_1, lag(b.pct_debt_below_90, 2) OVER w AS b90_2,

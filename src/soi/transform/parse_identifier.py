@@ -85,7 +85,9 @@ STRONG_SUFFIX_RE = re.compile(
 CATEGORY_PHRASES = [
     r"investments?( in)?", r"portfolio( companies| investments?)?", r"debt( investments?| securities)?",
     r"equity( investments?| securities| interests?)?", r"senior (secured )?(loans?|debt)",
-    r"(first|second|1st|2nd)[- ]?lien(/senior secured)?( (debt|loans?|secured debt))?",
+    r"(first|second|1st|2nd)[- ]?lien(/(senior )?secured( loans?| debt)?|/last[- ]out unitranche|/unitranche)?( (debt|loans?|secured debt))?",
+    r"senior secured", r"bank debt(/senior secured loans?)?", r"(us |u\.s\. )?corporate debt", r"u\.?s\.? debt",
+    r"canadian debt", r"european debt", r"industry", r"instrument",
     r"secured (debt|loans?)", r"unsecured (debt|loans?)", r"subordinated (debt|loans?|notes?)",
     r"(non[- ]?)?(controlled?|control|affiliated?|affiliate)([/,&\s]+(non[- ]?)?(controlled?|control|affiliated?|affiliate))*"
     r"( (investments?|portfolio companies|issuers?|companies))?",
@@ -117,7 +119,8 @@ _CATEGORY_HEAD_RE = re.compile(
 # Attribute clauses that appear after the instrument description; everything from the first one
 # on is dropped before looking for the issuer name.
 ATTRIBUTE_CLAUSE_RE = re.compile(
-    r"\b(investment type|asset type|commitment type|interest rate|rate type|maturity( date)?|"
+    r"\b(investment type|asset type|commitment type|facility type|instrument|industry|reference rate|"
+    r"all[- ]in rate|spread above index|interest rate|rate type|maturity( date)?|"
     r"acquisition date|spread|floor( rate)?|sofr|libor|prime|euribor|sonia|cdor|bbsw|"
     r"\d{1,2}-?month|par(?= |,|\))|due\b|pik\b|cash\b|coupon|yield|principal|shares?\b|units?\b|"
     r"\d+(\.\d+)?\s?%|\(\$[\d,]+)",
@@ -353,6 +356,7 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
     head = identifier.split("|ISS=")[0] if "ISS=" in identifier else identifier
     head = re.split(r"\s+[A-Z]{2,4}=", head)[0]
     head = _GLUED_HEAD_RE.sub(r"\1-", head)  # "Investmentsnon-controlled/..." (MSDL, Q1 2026)
+    head0 = head
     head = re.sub(r"\(.*?\)", " ", head)  # (fka X), (dba Y), (Pele Buyer, LLC)
     head = re.sub(r"[\^*†‡§]+", " ", head)  # footnote markers glued to names
     head = re.sub(rf"\b({SUFFIX_WORDS})\.?(\d{{1,3}})$", r"\1 \2", head, flags=re.IGNORECASE)  # "LLC2"
@@ -402,11 +406,20 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
         return _clean_token(_PCT_RE.sub(" ", identifier))[:120]
     for t in tokens:
         if STRONG_SUFFIX_RE.search(t) and _looks_like_company(t):
-            return _strip_trailing_instrument(t)
+            return _guard(_strip_trailing_instrument(t), head0, industry_re)
     for t in tokens:
         if _looks_like_company(t):
-            return _strip_trailing_instrument(t)
-    return _strip_trailing_instrument(tokens[0])
+            return _guard(_strip_trailing_instrument(t), head0, industry_re)
+    return _guard(_strip_trailing_instrument(tokens[0]), head0, industry_re)
+
+
+def _guard(issuer: str, head0: str, industry_re: re.Pattern[str]) -> str:
+    """A filer-tagged or learned "industry" that is really a company name ("Tivity Health") would
+    strip the name and leave "Inc."; when nothing name-like survives, redo the parse with the
+    built-in industry list only."""
+    if normalize_issuer(issuer) or industry_re is _INDUSTRY_HEAD_RE:
+        return issuer
+    return extract_issuer(head0, _INDUSTRY_HEAD_RE)
 
 
 def head_stripped_words(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEAD_RE) -> list[str]:
