@@ -71,8 +71,13 @@ const cache = new Map<string, Promise<unknown>>()
 function load<T>(path: string): Promise<T> {
   let p = cache.get(path)
   if (!p) {
-    p = fetch(DATA_BASE + path).then((r) => {
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${path}`)
+    // revalidate with the CDN each time (cheap 304s) so a viewer never keeps a stale file or a
+    // cached 404 from before a publish; and never memoise a failure, so a retry can succeed
+    p = fetch(DATA_BASE + path, { cache: 'no-cache' }).then((r) => {
+      if (!r.ok) {
+        cache.delete(path)
+        throw new Error(`${r.status} ${r.statusText} for ${path}`)
+      }
       return r.json()
     })
     p.catch(() => cache.delete(path))
