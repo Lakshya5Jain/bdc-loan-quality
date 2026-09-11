@@ -80,12 +80,13 @@ h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--ink); }
 .explain p { margin: 0 0 8px; } .explain p:last-child { margin: 0; }
 .note { font-size: 12.5px; color: var(--ink-3); margin: 8px 0 0; max-width: 90ch; line-height: 1.5; }
 .formula { font-family: var(--font-mono); font-size: 12.5px; background: var(--panel-2); padding: 8px 12px; border-radius: 6px; margin: 6px 0 14px; white-space: pre; overflow-x: auto; display: block; max-width: 100%; }
-.section { margin-bottom: 36px; }
+.section { margin-bottom: 36px; min-width: 0; overflow-x: auto; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .section-head .meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
 
 /* ---- panels, tiles -------------------------------------------------------------------- */
-.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; min-width: 0; overflow-x: auto; }
+/* a wide table scrolls inside its section or panel instead of pushing the whole page sideways */
 .panel > h2:first-child { margin-top: 0; }
 .panel.summary, .summary { font-size: 14.5px; line-height: 1.6; max-width: 90ch; }
 .row { display: flex; gap: 16px; flex-wrap: wrap; }
