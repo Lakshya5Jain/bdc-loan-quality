@@ -83,7 +83,20 @@ CASES = [
     ("Senior loans 238.6% | Diversified consumer services 28.8% | P.J. Fitzpatrick LLC, Revolver",
      "P.J. Fitzpatrick LLC", "first_lien", True),
     ("High Tech Industries | DKK | International Senior Loan Program Llc", "Senior Loan Program", "first_lien", True),
+    # separator dropped after "Investments" (Morgan Stanley Direct Lending, Q1 2026)
+    ("Investmentsnon-controlled/non-affiliated Debt Investments Food Products AMCP Pet Holdings, Inc. (Brightpet) "
+     "Investment First Lien Debt Reference Rate and Spread S + 7.00% (incl. 3.00% PIK) Interest rate 10.82% Maturity Date 1/04/2028",
+     "AMCP Pet Holdings Inc.", "first_lien", True),
 ]
+
+
+def test_ident_key_survives_format_drift():
+    from soi.transform.parse_identifier import ident_key
+    a = ident_key("Investments-non-controlled/non-affiliated Debt Investments Food Products AMCP Pet Holdings, Inc. "
+                  "Investment First Lien Debt Interest Rate 10.81% Maturity Date 01/04/2028")
+    b = ident_key("Investmentsnon-controlled/non-affiliated Debt Investments Food Products AMCP Pet Holdings, Inc. "
+                  "Investment First Lien Debt Interest rate 10.82% Maturity Date 1/04/2028")
+    assert a == b
 
 
 @pytest.mark.parametrize("ident,issuer_startswith,itype,is_debt", CASES)

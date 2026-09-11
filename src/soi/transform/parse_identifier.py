@@ -192,6 +192,10 @@ _SUFFIX_COMMA_RE = re.compile(
     re.IGNORECASE,
 )
 _KV_RE = re.compile(r"\b([A-Z]{2,4})=(\S+)")
+# a filer that drops the separator after "Investments" ("Investmentsnon-controlled/non-affiliated
+# Debt Investments ...") would otherwise carry the whole breadcrumb into the issuer name
+_GLUED_HEAD_RE = re.compile(r"(?i)^(investments?)(?=(non|controlled|affiliated|debt|equity)\b)")
+_DATE_ZERO_RE = re.compile(r"\b0(\d)/")
 _CURRENCY_RE = re.compile(r"^(USD|EUR|GBP|CAD|AUD|CHF|DKK|SEK|NOK|JPY|NZD|SGD|HKD|PLN|CZK)$")
 _PCT_RE = re.compile(r"\(?-?\s*\d+(\.\d+)?\s?%\)?")
 _SEQ_RE = re.compile(r"\s+\d{1,3}(\.\d{1,2})?$")
@@ -348,6 +352,7 @@ def extract_issuer(identifier: str, industry_re: re.Pattern[str] = _INDUSTRY_HEA
         return _clean_token(kv["ISS"].replace("_", " "))
     head = identifier.split("|ISS=")[0] if "ISS=" in identifier else identifier
     head = re.split(r"\s+[A-Z]{2,4}=", head)[0]
+    head = _GLUED_HEAD_RE.sub(r"\1-", head)  # "Investmentsnon-controlled/..." (MSDL, Q1 2026)
     head = re.sub(r"\(.*?\)", " ", head)  # (fka X), (dba Y), (Pele Buyer, LLC)
     head = re.sub(r"[\^*†‡§]+", " ", head)  # footnote markers glued to names
     head = re.sub(rf"\b({SUFFIX_WORDS})\.?(\d{{1,3}})$", r"\1 \2", head, flags=re.IGNORECASE)  # "LLC2"
@@ -468,6 +473,8 @@ def ident_key(identifier: str) -> str:
     """Identifier with volatile pieces removed (percent-of-net-assets, whitespace runs) so the
     same holding matches across quarters even when the filer embeds moving numbers."""
     s = _PCT_RE.sub(" ", identifier)
+    s = _GLUED_HEAD_RE.sub(r"\1-", s)
+    s = _DATE_ZERO_RE.sub(r"\1/", s)  # 01/04/2028 and 1/04/2028 are the same maturity
     s = re.sub(r"\s+", " ", s).strip(" ,;|-")
     return s.lower()
 

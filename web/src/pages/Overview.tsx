@@ -8,7 +8,10 @@ type Summary = { n_quarters: number; quarters_won: number; mean_spread: number |
 type Counts = { counts: { holdings: number; loans: number; bdcs: number; screened: number; latest_period: string; latest_price_date: string | null } }
 
 export default function Overview() {
-  const strat = useApi<{ summary: Summary }>('/api/strategy')
+  const strat = useApi<{ summary: Summary; signals: { signal: string; mean_spread_dir: number | null; n_periods: number }[] }>('/api/strategy')
+  const lab = useApi<{ variants: { variant: string; mean_net: number; quarters_won_net: number; n_quarters: number }[] }>('/api/lab')
+  const v2m = lab.data?.variants.find((v) => v.variant === 'floor_2m')
+  const navAlone = strat.data?.signals.find((x) => x.signal === 'nav_chg_4q')
   const status = useApi<Counts>('/api/status')
   const s = strat.data?.summary
   const c = status.data?.counts
@@ -30,6 +33,7 @@ export default function Overview() {
           <Stat k="Loan-quarters" v={c.holdings.toLocaleString()} d="one row per loan per quarter" />
           <Stat k="Quarters tested" v={`${s.quarters_won} of ${s.n_quarters}`} d="positive, long minus short" cls="pos" />
           <Stat k="Long minus short" v={signedPct(s.mean_spread)} d="average per quarter, before costs" cls="pos" />
+          {v2m && <Stat k="Tradable, after costs" v={signedPct(v2m.mean_net)} d={`$2m-a-day names, net of trading and borrow · ${v2m.quarters_won_net} of ${v2m.n_quarters} up`} cls={v2m.mean_net > 0 ? 'pos' : 'neg'} />}
           <Stat k="Book today" v={`${s.n_long_now} / ${s.n_long_now}`} d={`long / short of ${s.n_names_now} liquid names`} />
           <Stat k="Latest filings" v={s.latest_period} d={`prices ${s.latest_entry_date}`} />
         </div>
@@ -50,7 +54,8 @@ export default function Overview() {
       <Section title="What we found, in brief">
         <Explain kind="info">
           <p><b>The sickness of the book predicts the stock.</b> Ranking BDCs by the share of loans already marked below 90 cents on the dollar ranked the next quarter correctly in every one of the fifteen quarters tested. The combined health score won {s ? `${s.quarters_won} of ${s.n_quarters}` : '15 of 15'}, by about {s ? signedPct(s.mean_spread) : '4.5%'} per quarter between the healthy and sick groups, net of the sector and before costs.</p>
-          <p><b>The number everyone quotes does not.</b> Headline non-accruals, price to NAV and recent momentum carried no information about the next quarter on their own. The marks lead; the labels lag.</p>
+          <p><b>The number everyone quotes does not.</b> Headline non-accruals, price to NAV and recent momentum carried no information about the next quarter on their own. The marks lead; the labels lag. One caveat in the other direction: the one-year NAV change, which every press release carries, did about as well on its own{navAlone && navAlone.mean_spread_dir != null ? ` (${signedPct(navAlone.mean_spread_dir)} per quarter over ${navAlone.n_periods} quarters)` : ''}; the loan-level inputs add consistency and an earlier read rather than a bigger average.</p>
+            <p><b>What a fund would actually keep.</b> The gross spread is before costs and includes shorts in tiny names that are expensive to borrow. Restricted to names trading $2m a day and charged for trading and borrow, the strategy kept {v2m ? signedPct(v2m.mean_net) : 'less'} a quarter. That is the honest number; the <Link to="/results">results page</Link> shows every variant.</p>
           <p><b>What could still be wrong.</b> Fifteen quarters is one credit cycle; each side of the book holds about nine stocks; BDCs delisted since 2022 are missing from the test; returns are before the cost of borrowing stock to short. <Link to="/results">Every caveat is on the results page.</Link></p>
         </Explain>
       </Section>

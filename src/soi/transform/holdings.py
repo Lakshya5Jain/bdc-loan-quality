@@ -10,6 +10,7 @@ from soi.transform.parse_identifier import (
     candidate_parents,
     classify_member,
     head_stripped_words,
+    normalize_issuer,
     parse_identifier,
 )
 
@@ -112,6 +113,10 @@ PIK_TEXT_RE = (
     r"(?i)(([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)\s?%\s*(cash\s*/\s*)?PIK\b"
     r"|\bPIK[^%\d]{0,10}([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)\s?%)"
 )
+# "Spread 6.50% PIK 0.00%" (Chicago Atlantic) is not a PIK loan: a zero rate written after PIK is
+# neutralised before matching so the cash spread before it is not read as a PIK rate (DuckDB's
+# regex engine has no lookahead)
+PIK_ZERO_RE = r"(?i)\bPIK\s*0+(\.0+)?\s?%"
 
 # A footnote marks a holding as non-accrual when it is a short note saying THIS investment is on
 # non-accrual (not boilerplate such as "excludes those on non-accrual" or "net of non-accrual
@@ -320,7 +325,9 @@ def _learn_industry_phrases(rows: list[tuple[int, str]]) -> list[str]:
                 continue
             if any(w.lower().strip(",") in _PHRASE_STOP for w in prefix.split()):
                 continue
-            tails[(cik, prefix)].add(" ".join(words[k:]))
+            # count distinct issuers, not distinct spellings: "Blackbird Purchaser, Inc." and
+            # "Blackbird Purchaser, Inc" must not make "Blackbird" look like an industry
+            tails[(cik, prefix)].add(normalize_issuer(" ".join(words[k:])))
     learned = {prefix for (_, prefix), t in tails.items() if len(t) >= 3}
     return sorted(learned, key=len, reverse=True)
 
@@ -656,7 +663,13 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
                -- (legal-entity rows are diverted below)
                coalesce(fair_value, fair_value_alt, fair_value_alt2) AS fair_value,
                coalesce(cost, cost_alt, cost_alt2) AS cost,
-               coalesce(spread, spread_alt, spread_alt2) AS spread,
+               -- a few filers tag some spreads a hundredfold too small (Morgan Stanley Direct
+               -- Lending, Q2 2026: 0.0005 for a 5% spread); no loan spread is under 50 bp
+               CASE WHEN coalesce(spread, spread_alt, spread_alt2) > 0
+                     AND coalesce(spread, spread_alt, spread_alt2) < 0.005
+                     AND coalesce(spread, spread_alt, spread_alt2) * 100 <= 0.25
+                    THEN coalesce(spread, spread_alt, spread_alt2) * 100
+                    ELSE coalesce(spread, spread_alt, spread_alt2) END AS spread,
                coalesce(rate, rate_alt, rate_alt2) AS rate,
                coalesce(pik_rate, pik_alt, pik_alt2, pik_alt3) AS pik_rate,
                coalesce(shares, units_alt) AS shares,
@@ -1528,7 +1541,8 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
                coalesce(fa.nonaccrual_fn, FALSE)
                    OR regexp_matches(n.identifier, '(?i)non[- ]?accrual') AS nonaccrual_flag,
                (coalesce(n.pik_rate, 0) > 0
-                    OR regexp_matches(coalesce(fa.footnote_text, '') || ' ' || n.identifier, ?))
+                    OR regexp_matches(regexp_replace(coalesce(fa.footnote_text, '') || ' ' || n.identifier,
+                                                     ?, 'PIKZERO', 'g'), ?))
                    AS pik_flag,
                CASE WHEN n.cost IS NOT NULL AND n.cost <> 0 THEN n.fair_value / n.cost END AS mark,
                CASE WHEN coalesce(n.principal, p.par_amount * sc.scale) <> 0
@@ -1546,7 +1560,7 @@ def build_holdings(con: duckdb.DuckDBPyConnection) -> str:
         WHERE NOT EXISTS (SELECT 1 FROM excluded e WHERE e.adsh = n.adsh AND e.ddate = n.ddate
                           AND e.identifier = n.identifier AND e.legal_entity = n.legal_entity)
         """,
-        [PIK_TEXT_RE],
+        [PIK_ZERO_RE, PIK_TEXT_RE],
     )
     con.execute(
         """

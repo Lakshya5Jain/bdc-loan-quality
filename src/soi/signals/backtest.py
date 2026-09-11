@@ -41,6 +41,8 @@ ROUND_TRIP_COST = 0.004  # 40 bp round trip on each leg, applied to the quintile
 # a name is tradable at a date only if its median daily dollar volume over the prior 120
 # trading days is at least this (Firsthand at 3 cents and Franklin BSP at zero volume are not)
 MIN_DOLLAR_VOLUME = 100_000
+MAX_ENTRY_LAG_DAYS = 7    # first close after the filing must be within a week of it
+MIN_PRICE_DAYS = 60       # trading days of price history needed before a name can be ranked or traded
 # the calendar quarter a fiscal period end falls in, as its last day (May 31 -> June 30)
 QTR_SQL = "last_day(date_trunc('quarter', {col}) + INTERVAL 2 MONTH)"
 
@@ -132,7 +134,7 @@ def _build_universe(con: duckdb.DuckDBPyConnection) -> None:
             WHERE form IN ('10-Q', '10-K', '10-KT', '10-QT') GROUP BY 1, 2
         ),
         liq AS (
-            SELECT d.rebal_date, p.ticker, median(p.close * p.volume) AS dollar_vol
+            SELECT d.rebal_date, p.ticker, median(p.close * p.volume) AS dollar_vol, count(*) AS n_px_days
             FROM dates d JOIN market.prices p ON p.date <= d.rebal_date AND p.date > d.rebal_date - INTERVAL 180 DAY
             GROUP BY 1, 2
         ),
@@ -148,7 +150,7 @@ def _build_universe(con: duckdb.DuckDBPyConnection) -> None:
             LEFT JOIN signals.bdc_fundamentals f ON f.cik = a.cik AND f.period_end = ps.period_end
             JOIN liq ON liq.rebal_date = a.rebal_date AND liq.ticker = a.ticker
             WHERE coalesce(av.first_filed, ps.filed) <= a.rebal_date
-              AND liq.dollar_vol >= {MIN_DOLLAR_VOLUME}
+              AND liq.dollar_vol >= {MIN_DOLLAR_VOLUME} AND liq.n_px_days >= {MIN_PRICE_DAYS}
         )
         SELECT u.period_end, u.fiscal_period, u.rebal_date, u.next_rebal, u.cik, u.ticker, u.filed,
                u.fwd_ret, u.ret_6m, u.ret_3m, u.p_nav, b.data_ok, b.n_debt,
@@ -419,6 +421,8 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
             SELECT d.*,
                    (SELECT median(close * volume) FROM px2 WHERE px2.ticker = d.ticker
                        AND px2.date <= d.entry_date AND px2.date > d.entry_date - INTERVAL 180 DAY) AS dollar_vol,
+                   (SELECT count(*) FROM px2 WHERE px2.ticker = d.ticker
+                       AND px2.date <= d.entry_date AND px2.date > d.entry_date - INTERVAL 180 DAY) AS n_px_days,
                    (SELECT adj_close FROM px WHERE px.ticker = d.ticker AND px.date = d.entry_date) AS adj_entry,
                    (SELECT close FROM px WHERE px.ticker = d.ticker AND px.date = d.entry_date) AS close_entry,
                    (SELECT adj_close FROM px WHERE px.ticker = d.ticker AND px.date = d.exit_date) AS adj_exit
@@ -464,6 +468,10 @@ def run_event_backtest(con: duckdb.DuckDBPyConnection, log=print) -> str:
         )
         SELECT * FROM sig WHERE adj_entry > 0 AND adj_exit > 0 AND hold_days BETWEEN 20 AND 200
           AND dollar_vol >= {MIN_DOLLAR_VOLUME}
+          -- the stock must have been trading when the filing landed: a name that listed months
+          -- later would otherwise "enter" on its IPO day with a filing it could not have traded on
+          AND date_diff('day', filed, entry_date) <= {MAX_ENTRY_LAG_DAYS}
+          AND n_px_days >= {MIN_PRICE_DAYS}
         """
     )
     # percentile of each signal against every other name's latest filing as of the entry date
@@ -604,14 +612,14 @@ def build_default_strategy(con: duckdb.DuckDBPyConnection) -> str:
         ),
         px AS (
             SELECT ticker, arg_max(close, date) AS close_entry, max(date) AS entry_date,
-                   median(close * volume) AS dollar_vol
+                   median(close * volume) AS dollar_vol, count(*) AS n_px_days
             FROM market.prices WHERE date > current_date - INTERVAL 180 DAY GROUP BY 1
         ),
         cur AS (
             SELECT l.*, m.ticker, px.close_entry, px.entry_date, px.close_entry / nullif(l.nav_per_share, 0) AS p_nav
             FROM lastq l JOIN ref.bdc_master m ON m.cik = l.cik JOIN px ON px.ticker = m.ticker
             WHERE l.rn = 1 AND l.period_end >= (SELECT max(period_end) FROM lastq) - INTERVAL 200 DAY
-              AND px.dollar_vol >= {MIN_DOLLAR_VOLUME}
+              AND px.dollar_vol >= {MIN_DOLLAR_VOLUME} AND px.n_px_days >= {MIN_PRICE_DAYS}
         ),
         -- percentile among the names that have the input (share of others below, ties half),
         -- the same definition as the backtest; a missing input (a BDC too new for a one-year

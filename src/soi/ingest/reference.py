@@ -97,7 +97,10 @@ def build_reference(con: duckdb.DuckDBPyConnection, force_download: bool = False
         ),
         universe AS (
             SELECT coalesce(f.cik, r.cik) AS cik,
-                   coalesce(f.name, r.name) AS name,
+                   -- SEC writes the state of incorporation after a backslash; the bulk file drops
+                   -- the backslash ("GLADSTONE INVESTMENT CORPORATION" + backslash + "DE" -> "...CORPORATIONDE")
+                   regexp_replace(coalesce(f.name, r.name),
+                                  '(CORPORATION|CORP|INC|COMPANY|LTD|LLC|FUND|TRUST|CO)\\\\?(DE|MD|NV|NY|PA|MA|CA)$', '\\1') AS name,
                    coalesce(f.file_no, r.file_no) AS file_no,
                    f.last_filed
             FROM filers f FULL OUTER JOIN ref.bdc_report r ON f.cik = r.cik

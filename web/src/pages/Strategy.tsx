@@ -76,6 +76,11 @@ export function Results() {
   const vres = lab.data?.variants.find((v) => v.variant === 'residual_pnav')
   const vgen = lab.data?.variants.find((v) => v.variant === 'plus_generosity')
   const vdef = lab.data?.variants.find((v) => v.variant === 'default_4')
+  const navAlone = signals.find((x) => x.signal === 'nav_chg_4q')
+  const shortCounts = new Map<string, number>()
+  for (const p of periods) for (const t of p.shorts.split(',')) shortCounts.set(t, (shortCounts.get(t) ?? 0) + 1)
+  const persistentShorts = [...shortCounts.entries()].filter(([, n]) => n >= 0.8 * periods.length).map(([t]) => t)
+  const persistentShare = persistentShorts.length ? Math.min(...persistentShorts.map((t) => shortCounts.get(t)! / periods.length)) : 0
 
   const periodCols: Col<Period>[] = [
     { header: 'Quarter reported', accessorKey: 'period_end', left: true, cell: (c) => qlabel(c.getValue<string>()) },
@@ -111,9 +116,13 @@ export function Results() {
         <Stat k="Long minus short, per quarter" v={signedPct(s.mean_spread)} d="average, before costs" cls={(s.mean_spread ?? 0) > 0 ? 'pos' : 'neg'} />
         <Stat k="Worst quarter" v={signedPct(s.worst_spread)} d={`best ${signedPct(s.best_spread)}`} cls={(s.worst_spread ?? 0) >= 0 ? 'pos' : 'neg'} />
         <Stat k="t-statistic" v={num(s.spread_tstat, 1)} d="above 3 is hard to get by luck" />
+        {v2m && <Stat k="Tradable version, net" v={signedPct(v2m.mean_net)} d={`$2m-a-day names only, after trading and borrow costs · ${v2m.quarters_won_net} of ${v2m.n_quarters} up`} cls={v2m.mean_net > 0 ? 'pos' : 'neg'} />}
         <Stat k="Book today" v={`${s.n_long_now} / ${s.n_long_now}`} d={`long / short, of ${s.n_names_now} liquid names`} />
         <Stat k="Data as of" v={s.latest_period} d={`prices ${s.latest_entry_date}`} />
       </div>
+      <Explain kind="warn">
+        <p><b>Read the headline with three things in mind.</b> First, the gross figure is not tradable: after costs the default keeps {vdef ? signedPct(vdef.mean_net) : 'far less'} a quarter{vdef && vdef.worst_net < 0 ? `, and lost money net of borrow in ${vdef.n_quarters - vdef.quarters_won_net} of ${vdef.n_quarters} quarters` : ''}. The line a fund would run is the $2m-floor version in the variants table below, and that is the number to quote. Second, the short book is persistent: {persistentShorts.length > 0 ? `${persistentShorts.join(' and ')} ${persistentShorts.length > 1 ? 'are' : 'is'} in it in ${Math.round(100 * persistentShare)}% of quarters` : 'the same few names recur'}, so part of the record is one quality-versus-junk position held through a single regime, not fifteen independent bets. Third, the single input everyone already watches, the one-year NAV change, earned {navAlone ? signedPct(navAlone.mean_spread_dir) : 'about as much'} per quarter on its own over {navAlone ? navAlone.n_periods : 'fewer'} quarters; the loan-level inputs add consistency and an earlier read, not a bigger average.</p>
+      </Explain>
 
       <Section title="Long minus short, each quarter" meta={`${periods.length} quarters of reports`}>
         <div className="panel">
@@ -219,7 +228,9 @@ export function Results() {
       <Section title="What to keep in mind">
       <Explain kind="warn">
         <ul style={{ margin: 0, paddingLeft: 20 }}>
-          <li><b>One credit cycle.</b> Fifteen quarters of history, from late 2022. Different markets may behave differently.</li>
+          <li><b>One credit cycle.</b> Fifteen quarters of history, from late 2022, with no default wave in them. Different markets may behave differently.</li>
+          <li><b>Few independent bets.</b> The same handful of names sit in the short book nearly every quarter, so the fifteen quarters are not fifteen independent tests of the idea.</li>
+          <li><b>Listing dates.</b> A name enters the test only once its stock had traded for at least sixty days and only if the first close after a filing comes within a week of it, so a BDC that listed after a filing is never "bought" on its IPO day.</li>
           <li><b>Small books.</b> Each side holds about nine stocks, so one blow-up moves a quarter.</li>
           <li><b>Missing names.</b> BDCs bought out or delisted since 2022 are not in the test. Their price history is not freely available.</li>
           <li><b>Costs.</b> The headline figures are before trading costs and before the cost of borrowing stock to short. The variants table above charges both; read the net columns there for what a fund would keep.</li>

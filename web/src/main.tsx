@@ -20,6 +20,7 @@ import Glossary from './pages/Glossary'
 import Method from './pages/Method'
 import StaleMarks from './pages/StaleMarks'
 import Neighbors from './pages/Neighbors'
+import NotFound from './pages/NotFound'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -47,6 +48,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="glossary" element={<Glossary />} />
           <Route path="stale-marks" element={<StaleMarks />} />
           <Route path="neighbors" element={<Neighbors />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </BrowserRouter>
