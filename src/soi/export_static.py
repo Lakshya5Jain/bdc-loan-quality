@@ -35,6 +35,16 @@ from typing import Any
 LOAN_SHARDS = 4096
 BORROWER_SHARDS = 256
 
+def _guarded(col: str) -> str:
+    """Same rule as /api/bdcs/{key}/loans: a mark on a near-zero cost, or outside 0 to 1.5, is a
+    filing artefact and is blanked."""
+    if col == "mark":
+        return "CASE WHEN cost >= 1000 AND mark BETWEEN 0 AND 1.5 THEN mark END AS mark"
+    if col == "prev_mark":
+        return "CASE WHEN prev_cost >= 1000 AND prev_mark BETWEEN 0 AND 1.5 THEN prev_mark END AS prev_mark"
+    return col
+
+
 LOAN_LIST_COLS = [
     "loan_id", "match_method", "identifier", "issuer_name", "issuer_norm", "instrument_type",
     "instrument_subtype", "is_debt", "industry", "fair_value", "cost", "principal", "mark",
@@ -219,7 +229,7 @@ def export_static(out: Path, log: Callable[[str], None] = print) -> dict[str, An
     # --- per-BDC-period loan lists (same columns/order as /api/bdcs/{cik}/loans) ------------
     lq = db.rows(
         f"""
-        SELECT cik, period_end, {", ".join(LOAN_LIST_COLS)}
+        SELECT cik, period_end, {", ".join(_guarded(c) for c in LOAN_LIST_COLS)}
         FROM signals.loan_quarter
         ORDER BY cik, period_end, is_debt DESC, mark ASC NULLS LAST, cost DESC NULLS LAST
         """
