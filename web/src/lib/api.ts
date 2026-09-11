@@ -136,6 +136,13 @@ async function staticGet<T>(url: string): Promise<T> {
     const publicOnly = u.searchParams.get('public_only') === 'true'
     return (publicOnly ? rows.filter((r) => r.is_public) : rows) as T
   }
+  if (a === 'bdcs' && b && !/^\d+$/.test(b)) {
+    // ticker in the address: resolve it to the CIK the files are named by
+    const rows = await load<Row[]>('/bdcs.json')
+    const hit = rows.find((r) => String(r.ticker ?? '').toUpperCase() === b.toUpperCase())
+    if (!hit) throw new Error(`404 unknown BDC ${b}`)
+    return staticGet<T>(url.replace(`/bdcs/${b}`, `/bdcs/${hit.cik}`))
+  }
   if (a === 'bdcs' && b && !c) return load<T>(`/bdcs/${b}.json`)
   if (a === 'bdcs' && b && c === 'loans') {
     let period = u.searchParams.get('period')

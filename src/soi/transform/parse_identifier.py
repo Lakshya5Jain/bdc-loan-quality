@@ -199,6 +199,11 @@ _KV_RE = re.compile(r"\b([A-Z]{2,4})=(\S+)")
 # Debt Investments ...") would otherwise carry the whole breadcrumb into the issuer name
 _GLUED_HEAD_RE = re.compile(r"(?i)^(investments?)(?=(non|controlled|affiliated|debt|equity)\b)")
 _DATE_ZERO_RE = re.compile(r"\b0(\d)/")
+# an issuer that starts with one of these has lost its real name to a heading strip
+# ("Higginbotham Insurance Agency Inc." -> "Agency Inc.")
+_GENERIC_FIRST_WORDS = frozenset(
+    ["agency", "holdings", "holding", "buyer", "purchaser", "parent", "intermediate", "borrower", "acquisition", "acquisitions", "bidco", "midco", "topco", "holdco", "opco", "group", "partners", "company", "inc", "llc", "corp", "co", "ltd", "lp"]
+)
 _CURRENCY_RE = re.compile(r"^(USD|EUR|GBP|CAD|AUD|CHF|DKK|SEK|NOK|JPY|NZD|SGD|HKD|PLN|CZK)$")
 _PCT_RE = re.compile(r"\(?-?\s*\d+(\.\d+)?\s?%\)?")
 _SEQ_RE = re.compile(r"\s+\d{1,3}(\.\d{1,2})?$")
@@ -417,7 +422,10 @@ def _guard(issuer: str, head0: str, industry_re: re.Pattern[str]) -> str:
     """A filer-tagged or learned "industry" that is really a company name ("Tivity Health") would
     strip the name and leave "Inc."; when nothing name-like survives, redo the parse with the
     built-in industry list only."""
-    if normalize_issuer(issuer) or industry_re is _INDUSTRY_HEAD_RE:
+    if industry_re is _INDUSTRY_HEAD_RE:
+        return issuer
+    first = re.sub(r"[^a-z]", "", issuer.split()[0].lower()) if issuer.split() else ""
+    if normalize_issuer(issuer) and first not in _GENERIC_FIRST_WORDS:
         return issuer
     return extract_issuer(head0, _INDUSTRY_HEAD_RE)
 
