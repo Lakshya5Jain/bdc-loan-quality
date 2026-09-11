@@ -43,6 +43,11 @@ gh release upload data "$TMP/data.tar.gz" --clobber
 gh release edit data --notes "Rolling asset from \`uv run soi export-static\`. $(cat web/public/data/manifest.json)"
 
 if [ "$DEPLOY" = 1 ]; then
-  echo "publish: deploying to Vercel"
-  vercel deploy --prod --yes --cwd web
+  # Do not upload the working tree (the CLI would push gigabytes and the root vercel.json's
+  # install command only resolves in a Git build). Rebuild the current production deployment
+  # instead: its build downloads the bundle just uploaded. Pushing to main does the same.
+  echo "publish: rebuilding the current production deployment"
+  CURRENT="$(cd web && vercel ls --prod 2>/dev/null | grep -o 'https://[^ ]*vercel.app' | head -1)"
+  [ -n "$CURRENT" ] || { echo "publish: no production deployment found; push to main to build" >&2; exit 1; }
+  (cd web && vercel redeploy "$CURRENT" < /dev/null)
 fi
